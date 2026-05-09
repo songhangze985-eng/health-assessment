@@ -1,0 +1,8 @@
+{
+  "command": "/absolute/path/to/health-assessment/.venv/bin/python",
+  "args": ["server/openclaw_mcp_server.py"],
+  "cwd": "/absolute/path/to/health-assessment",
+  "env": {
+    "HEALTH_ASSESSMENT_URL": "http://127.0.0.1:8787"
+  }
+}

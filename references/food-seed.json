@@ -1,0 +1,224 @@
+{
+  "metadata": {
+    "schema_version": 1,
+    "description": "Small seed database for common foods. Values are generic per 100 g and should be refreshed server-side from authoritative food composition sources before production use.",
+    "primary_sources": [
+      "USDA FoodData Central: https://fdc.nal.usda.gov/api-guide",
+      "Chinese Food Composition Tables standard edition, referenced by Chinese Dietary Guidelines 2022"
+    ],
+    "units": "per 100 g edible portion unless otherwise stated"
+  },
+  "foods": [
+    {
+      "id": "apple_raw",
+      "display_name": "苹果",
+      "aliases": ["苹果", "apple"],
+      "category": "fruit",
+      "default_portion_g": 182,
+      "nutrients_per_100g": {
+        "energy_kcal": 52,
+        "protein_g": 0.26,
+        "fat_g": 0.17,
+        "carbohydrate_g": 13.81,
+        "fiber_g": 2.4,
+        "sugar_g": 10.39,
+        "sodium_mg": 1,
+        "potassium_mg": 107,
+        "vitamin_c_mg": 4.6
+      }
+    },
+    {
+      "id": "banana_raw",
+      "display_name": "香蕉",
+      "aliases": ["香蕉", "banana"],
+      "category": "fruit",
+      "default_portion_g": 118,
+      "nutrients_per_100g": {
+        "energy_kcal": 89,
+        "protein_g": 1.09,
+        "fat_g": 0.33,
+        "carbohydrate_g": 22.84,
+        "fiber_g": 2.6,
+        "sugar_g": 12.23,
+        "sodium_mg": 1,
+        "potassium_mg": 358,
+        "vitamin_c_mg": 8.7
+      }
+    },
+    {
+      "id": "orange_raw",
+      "display_name": "橙子",
+      "aliases": ["橙子", "橙", "orange"],
+      "category": "fruit",
+      "default_portion_g": 131,
+      "nutrients_per_100g": {
+        "energy_kcal": 47,
+        "protein_g": 0.94,
+        "fat_g": 0.12,
+        "carbohydrate_g": 11.75,
+        "fiber_g": 2.4,
+        "sugar_g": 9.35,
+        "sodium_mg": 0,
+        "potassium_mg": 181,
+        "vitamin_c_mg": 53.2
+      }
+    },
+    {
+      "id": "broccoli_raw",
+      "display_name": "西兰花",
+      "aliases": ["西兰花", "broccoli"],
+      "category": "vegetable",
+      "default_portion_g": 100,
+      "nutrients_per_100g": {
+        "energy_kcal": 34,
+        "protein_g": 2.82,
+        "fat_g": 0.37,
+        "carbohydrate_g": 6.64,
+        "fiber_g": 2.6,
+        "sugar_g": 1.7,
+        "sodium_mg": 33,
+        "potassium_mg": 316,
+        "vitamin_c_mg": 89.2
+      }
+    },
+    {
+      "id": "tomato_raw",
+      "display_name": "番茄",
+      "aliases": ["番茄", "西红柿", "tomato"],
+      "category": "vegetable",
+      "default_portion_g": 123,
+      "nutrients_per_100g": {
+        "energy_kcal": 18,
+        "protein_g": 0.88,
+        "fat_g": 0.2,
+        "carbohydrate_g": 3.89,
+        "fiber_g": 1.2,
+        "sugar_g": 2.63,
+        "sodium_mg": 5,
+        "potassium_mg": 237,
+        "vitamin_c_mg": 13.7
+      }
+    },
+    {
+      "id": "rice_white_cooked",
+      "display_name": "米饭",
+      "aliases": ["米饭", "白米饭", "rice"],
+      "category": "grain",
+      "default_portion_g": 150,
+      "nutrients_per_100g": {
+        "energy_kcal": 130,
+        "protein_g": 2.38,
+        "fat_g": 0.21,
+        "carbohydrate_g": 28.59,
+        "fiber_g": 0.3,
+        "sugar_g": 0.05,
+        "sodium_mg": 1,
+        "potassium_mg": 29
+      }
+    },
+    {
+      "id": "oats_dry",
+      "display_name": "燕麦",
+      "aliases": ["燕麦", "燕麦片", "oats"],
+      "category": "grain",
+      "default_portion_g": 40,
+      "nutrients_per_100g": {
+        "energy_kcal": 379,
+        "protein_g": 13.15,
+        "fat_g": 6.52,
+        "carbohydrate_g": 67.7,
+        "fiber_g": 10.1,
+        "sugar_g": 0.99,
+        "sodium_mg": 6,
+        "potassium_mg": 362
+      }
+    },
+    {
+      "id": "milk_whole",
+      "display_name": "牛奶",
+      "aliases": ["牛奶", "全脂牛奶", "milk"],
+      "category": "dairy",
+      "default_portion_g": 250,
+      "nutrients_per_100g": {
+        "energy_kcal": 61,
+        "protein_g": 3.15,
+        "fat_g": 3.25,
+        "carbohydrate_g": 4.8,
+        "fiber_g": 0,
+        "sugar_g": 5.05,
+        "sodium_mg": 43,
+        "potassium_mg": 132,
+        "calcium_mg": 113
+      }
+    },
+    {
+      "id": "egg_whole",
+      "display_name": "鸡蛋",
+      "aliases": ["鸡蛋", "蛋", "egg"],
+      "category": "protein",
+      "default_portion_g": 50,
+      "nutrients_per_100g": {
+        "energy_kcal": 143,
+        "protein_g": 12.56,
+        "fat_g": 9.51,
+        "carbohydrate_g": 0.72,
+        "fiber_g": 0,
+        "sugar_g": 0.37,
+        "sodium_mg": 142,
+        "potassium_mg": 138
+      }
+    },
+    {
+      "id": "chicken_breast_cooked",
+      "display_name": "鸡胸肉",
+      "aliases": ["鸡胸肉", "鸡胸", "chicken breast"],
+      "category": "protein",
+      "default_portion_g": 100,
+      "nutrients_per_100g": {
+        "energy_kcal": 165,
+        "protein_g": 31.02,
+        "fat_g": 3.57,
+        "carbohydrate_g": 0,
+        "fiber_g": 0,
+        "sugar_g": 0,
+        "sodium_mg": 74,
+        "potassium_mg": 256
+      }
+    },
+    {
+      "id": "tofu_firm",
+      "display_name": "豆腐",
+      "aliases": ["豆腐", "tofu"],
+      "category": "protein",
+      "default_portion_g": 100,
+      "nutrients_per_100g": {
+        "energy_kcal": 76,
+        "protein_g": 8.08,
+        "fat_g": 4.78,
+        "carbohydrate_g": 1.87,
+        "fiber_g": 0.3,
+        "sugar_g": 0.62,
+        "sodium_mg": 7,
+        "potassium_mg": 121,
+        "calcium_mg": 350
+      }
+    },
+    {
+      "id": "salmon_raw",
+      "display_name": "三文鱼",
+      "aliases": ["三文鱼", "鲑鱼", "salmon"],
+      "category": "protein",
+      "default_portion_g": 100,
+      "nutrients_per_100g": {
+        "energy_kcal": 208,
+        "protein_g": 20.42,
+        "fat_g": 13.42,
+        "carbohydrate_g": 0,
+        "fiber_g": 0,
+        "sugar_g": 0,
+        "sodium_mg": 59,
+        "potassium_mg": 363
+      }
+    }
+  ]
+}

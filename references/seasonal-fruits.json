@@ -1,0 +1,67 @@
+{
+  "metadata": {
+    "schema_version": 1,
+    "region": "China general / northern hemisphere",
+    "description": "Approximate seasonal fruit calendar for Chinese-first recommendations. Local supply varies by province, storage, greenhouse production, and imports.",
+    "daily_fruit_target_g": [200, 350],
+    "weather_source": "Open-Meteo no-key forecast API, server-side optional lookup"
+  },
+  "seasons": {
+    "spring": {
+      "months": [3, 4, 5],
+      "focus": "春季水果选择以新鲜、易清洗、不过量为主；花粉季注意区分过敏和感冒样症状。",
+      "fruits": ["草莓", "枇杷", "樱桃", "桑葚", "菠萝", "芒果"]
+    },
+    "summer": {
+      "months": [6, 7, 8],
+      "focus": "夏季高温时注意补水和冷藏；水果不能替代正餐和饮水。",
+      "fruits": ["西瓜", "桃", "李子", "杏", "葡萄", "蓝莓", "哈密瓜", "荔枝"]
+    },
+    "autumn": {
+      "months": [9, 10, 11],
+      "focus": "秋季水果丰富，优先选择完整鲜果；干燥天气注意饮水。",
+      "fruits": ["苹果", "梨", "葡萄", "柿子", "石榴", "猕猴桃", "橘子", "柚子"]
+    },
+    "winter": {
+      "months": [12, 1, 2],
+      "focus": "冬季可选择柑橘类、苹果、梨等易保存水果；注意室内干燥和食品卫生。",
+      "fruits": ["橙子", "橘子", "柚子", "苹果", "梨", "猕猴桃", "冬枣"]
+    }
+  },
+  "monthly": {
+    "1": ["橙子", "橘子", "柚子", "苹果", "梨", "猕猴桃"],
+    "2": ["橙子", "柚子", "苹果", "梨", "草莓", "猕猴桃"],
+    "3": ["草莓", "菠萝", "枇杷", "苹果", "梨"],
+    "4": ["草莓", "枇杷", "桑葚", "菠萝", "芒果"],
+    "5": ["樱桃", "枇杷", "桑葚", "草莓", "芒果"],
+    "6": ["樱桃", "桃", "杏", "西瓜", "蓝莓", "荔枝"],
+    "7": ["西瓜", "桃", "李子", "葡萄", "哈密瓜", "蓝莓"],
+    "8": ["西瓜", "葡萄", "桃", "李子", "哈密瓜", "梨"],
+    "9": ["葡萄", "梨", "苹果", "石榴", "猕猴桃", "柚子"],
+    "10": ["苹果", "梨", "柿子", "石榴", "猕猴桃", "橘子"],
+    "11": ["苹果", "梨", "柿子", "橘子", "橙子", "柚子"],
+    "12": ["橙子", "橘子", "柚子", "苹果", "梨", "冬枣"]
+  },
+  "weather_rules": [
+    {
+      "id": "hot",
+      "when": "temperature_c >= 30",
+      "advice": "天气偏热，水果注意冷藏和清洗，外出运动后先补水；水果仍按每日200-350g鲜果控制。"
+    },
+    {
+      "id": "cold",
+      "when": "temperature_c <= 5",
+      "advice": "天气偏冷，注意保暖和规律进餐；水果可常温放置后食用，避免一次吃太多冰冷食物。"
+    },
+    {
+      "id": "rain",
+      "when": "precipitation_mm > 0",
+      "advice": "有降水或潮湿，鲜果买回后保持干净干燥，切开的水果及时冷藏。"
+    },
+    {
+      "id": "dry",
+      "when": "relative_humidity_percent < 35",
+      "advice": "空气偏干，注意饮水；梨、橙子等水分较多的鲜果可作为水果摄入选择。"
+    }
+  ]
+}

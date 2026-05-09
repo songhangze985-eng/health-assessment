@@ -1,0 +1,156 @@
+{
+  "metadata": {
+    "schema_version": 1,
+    "description": "Common condition and symptom guidance for non-diagnostic triage-oriented health education.",
+    "primary_sources": [
+      "CDC Common Cold: https://www.cdc.gov/common-cold/treatment/index.html",
+      "CDC Flu: https://www.cdc.gov/flu/signs-symptoms/",
+      "CDC COVID-19 Symptoms: https://www.cdc.gov/covid/signs-symptoms/index.html",
+      "MedlinePlus Common Cold: https://medlineplus.gov/commoncold.html",
+      "MedlinePlus Diarrhea: https://medlineplus.gov/diarrhea.html",
+      "MedlinePlus Fever: https://medlineplus.gov/fever.html",
+      "MedlinePlus Headache: https://medlineplus.gov/headache.html",
+      "MedlinePlus Chest Pain: https://medlineplus.gov/chestpain.html",
+      "MedlinePlus Nausea and Vomiting: https://medlineplus.gov/nauseaandvomiting.html",
+      "MedlinePlus Sore Throat: https://medlineplus.gov/sorethroat.html",
+      "MedlinePlus UTI: https://medlineplus.gov/urinarytractinfections.html",
+      "MedlinePlus Allergy: https://medlineplus.gov/allergy.html"
+    ],
+    "disclaimer": "以下内容仅用于健康教育和分诊提示，不构成诊断或处方。症状严重、持续或让你担心时，应联系医疗专业人员。"
+  },
+  "global_emergency_flags": [
+    "呼吸困难",
+    "气短",
+    "胸痛",
+    "胸口压榨感",
+    "意识混乱",
+    "抽搐",
+    "无法唤醒",
+    "嘴唇发青",
+    "严重脱水",
+    "尿很少",
+    "持续胸腹部压迫痛"
+  ],
+  "conditions": [
+    {
+      "id": "common_cold",
+      "display_name": "感冒样症状",
+      "aliases": ["感冒", "着凉", "鼻塞", "流鼻涕", "打喷嚏", "咳嗽"],
+      "possible_causes": ["普通感冒常由病毒引起", "也可能与流感或COVID-19等呼吸道感染症状重叠", "过敏也可能造成流涕、鼻塞、打喷嚏"],
+      "questions": ["什么时候开始的？", "有没有发热、气短、胸痛或症状突然加重？", "是否接触过流感/COVID-19患者？", "是否属于孕期、65岁以上、慢病或免疫功能低下人群？"],
+      "self_care": ["休息，补充水分", "保持室内通风，咳嗽或打喷嚏时遮挡", "可用温盐水漱口、加湿器或温热饮缓解不适", "如怀疑流感或COVID-19，尤其高风险人群，应尽早检测并联系医生评估抗病毒治疗"],
+      "avoid": ["不要自行使用抗生素治疗普通感冒", "不要把水果、补剂或偏方当作治疗"],
+      "seek_medical_care": ["发热超过4天", "症状超过10天没有改善", "好转后又出现发热或咳嗽加重", "慢性病症状加重", "脱水"],
+      "emergency": ["呼吸困难", "胸痛或胸腹部持续压迫感", "意识混乱", "严重虚弱或无法保持清醒"],
+      "source_ids": ["CDC Common Cold", "CDC Flu", "CDC COVID-19", "MedlinePlus Common Cold"]
+    },
+    {
+      "id": "flu_like",
+      "display_name": "流感样症状",
+      "aliases": ["流感", "浑身酸痛", "高烧", "发冷", "寒战", "突然发烧"],
+      "possible_causes": ["流感常表现为突然发热、咳嗽、咽痛、肌肉酸痛、头痛和疲劳", "COVID-19和其他病毒感染也可类似"],
+      "questions": ["症状是否突然开始？体温多少？", "有没有气短、胸痛、意识改变或严重虚弱？", "是否为孕期、儿童、老人或慢病高风险人群？", "是否在48小时内起病并可联系医生评估抗病毒治疗？"],
+      "self_care": ["休息、补液、减少与他人接触", "尽早检测流感/COVID-19", "高风险人群即使症状轻也应尽快联系医生"],
+      "avoid": ["不要带病上班上学传播给他人", "不要自行混用多种退烧/感冒药"],
+      "seek_medical_care": ["高风险人群出现流感样症状", "发热或咳嗽好转后又加重", "慢性病加重"],
+      "emergency": ["呼吸困难或气短", "胸腹部持续疼痛或压迫", "持续头晕、意识混乱、抽搐", "不排尿", "严重肌肉痛或严重虚弱"],
+      "source_ids": ["CDC Flu", "CDC COVID-19"]
+    },
+    {
+      "id": "fever",
+      "display_name": "发热",
+      "aliases": ["发烧", "发热", "体温高", "低烧"],
+      "possible_causes": ["感染是常见原因", "也可能与热相关疾病、药物反应、自身免疫等有关"],
+      "questions": ["体温多少、测量部位是什么？", "持续了多久？", "是否伴随皮疹、呼吸困难、胸痛、颈部僵硬、意识异常或严重头痛？", "是否为婴幼儿、孕期、免疫低下或慢病人群？"],
+      "self_care": ["休息、补液，记录体温变化", "避免过度捂汗", "如需用退热药，应按说明书或医生建议，注意禁忌"],
+      "avoid": ["儿童和青少年发热不要使用阿司匹林", "不要只靠退热掩盖持续或加重的病情"],
+      "seek_medical_care": ["发热持续超过4天", "伴随明显脱水", "症状严重或让你担心", "婴幼儿、孕期、免疫低下或慢病人群发热"],
+      "emergency": ["呼吸困难", "意识混乱", "抽搐", "颈部僵硬伴严重头痛", "胸痛"],
+      "source_ids": ["MedlinePlus Fever", "CDC Common Cold", "CDC Flu"]
+    },
+    {
+      "id": "sore_throat",
+      "display_name": "咽喉痛",
+      "aliases": ["嗓子疼", "喉咙痛", "咽痛", "吞咽痛"],
+      "possible_causes": ["感冒和流感常见", "也可能是过敏、链球菌性咽炎、扁桃体炎、烟草刺激等"],
+      "questions": ["是否发热、咳嗽、流涕或扁桃体有脓点？", "有没有皮疹、颈部淋巴结肿大或吞咽困难？", "持续几天了？"],
+      "self_care": ["多喝水，可用温盐水漱口", "避免烟酒和刺激性环境", "可使用含片缓解，但幼儿需避免窒息风险"],
+      "avoid": ["不要自行用抗生素；是否需要抗生素应由医生根据检查判断"],
+      "seek_medical_care": ["咽痛数日不缓解", "高热、皮疹、颈部淋巴结明显肿大", "吞咽困难或症状加重"],
+      "emergency": ["呼吸困难", "无法吞咽口水", "严重颈部肿胀"],
+      "source_ids": ["MedlinePlus Sore Throat"]
+    },
+    {
+      "id": "diarrhea",
+      "display_name": "腹泻",
+      "aliases": ["拉肚子", "腹泻", "水样便", "肚子泻"],
+      "possible_causes": ["病毒、细菌或寄生虫感染", "食物或水污染", "药物、食物不耐受、肠道疾病"],
+      "questions": ["一天几次？持续多久？", "有没有发热、血便、黑便、严重腹痛或脱水？", "最近是否吃了可疑食物、旅行或使用抗生素？"],
+      "self_care": ["重点补充水分和电解质", "症状减轻时选择清淡、易消化食物", "注意洗手和食品卫生"],
+      "avoid": ["腹泻时减少酒精、咖啡因、油腻食物", "儿童和老人更容易脱水，不要拖延观察"],
+      "seek_medical_care": ["成人腹泻超过2天或持续加重", "儿童超过24小时", "发热、血便、黑便、严重腹痛或脱水"],
+      "emergency": ["严重脱水", "血便或黑便", "剧烈腹痛", "意识异常"],
+      "source_ids": ["MedlinePlus Diarrhea"]
+    },
+    {
+      "id": "nausea_vomiting",
+      "display_name": "恶心呕吐",
+      "aliases": ["恶心", "想吐", "呕吐", "吐了", "反胃"],
+      "possible_causes": ["胃肠炎、食物中毒、晕动、偏头痛、药物、妊娠、胃食管反流等"],
+      "questions": ["吐了几次、能否喝水？", "有没有血性或咖啡色呕吐物？", "是否严重腹痛、头痛伴颈部僵硬、发热或脱水？", "是否可能妊娠或误食有毒物？"],
+      "self_care": ["少量多次饮用清液，避免脱水", "能进食后选择清淡食物", "避免油腻、辛辣、酒精和强烈气味"],
+      "avoid": ["不要强行大量进食", "怀疑中毒或呕血时不要居家观察"],
+      "seek_medical_care": ["呕吐超过24小时", "12小时以上无法保留液体", "尿少、口干等脱水表现", "严重腹痛"],
+      "emergency": ["怀疑中毒", "呕血或咖啡色呕吐物", "严重头痛伴颈部僵硬", "严重脱水"],
+      "source_ids": ["MedlinePlus Nausea and Vomiting"]
+    },
+    {
+      "id": "headache",
+      "display_name": "头痛",
+      "aliases": ["头痛", "头疼", "偏头痛", "脑袋疼"],
+      "possible_causes": ["紧张性头痛常与压力、睡眠不足、漏餐有关", "也可能是偏头痛、鼻窦问题、感染或更严重问题"],
+      "questions": ["是否突然爆发、最严重的一次？", "有没有发热、颈部僵硬、意识混乱、视力/说话/肢体异常？", "是否头部外伤后出现？", "最近睡眠、饮水、压力和用药情况如何？"],
+      "self_care": ["休息、补水，记录触发因素", "规律睡眠和进餐", "如使用止痛药，避免频繁使用导致反跳性头痛"],
+      "avoid": ["不要忽视突然剧烈或伴神经症状的头痛"],
+      "seek_medical_care": ["头痛模式改变", "治疗不再有效", "需要每周多次用止痛药", "孕期或可能怀孕"],
+      "emergency": ["突发爆炸样头痛", "有发热和颈部僵硬", "意识混乱、说话/视力/肢体异常", "头部外伤后头痛", "一侧眼睛剧痛伴发红"],
+      "source_ids": ["MedlinePlus Headache"]
+    },
+    {
+      "id": "chest_pain",
+      "display_name": "胸痛",
+      "aliases": ["胸痛", "胸口疼", "胸闷", "胸口压迫", "心口疼"],
+      "possible_causes": ["可能来自心脏、肺部、消化道、肌肉骨骼或焦虑等", "部分胸痛可能危及生命"],
+      "questions": ["是否压榨样、紧缩样或持续不缓解？", "是否放射到下颌、左臂、背部或肩胛间？", "有没有气短、出汗、恶心、头晕或心跳异常？"],
+      "self_care": ["胸痛不适合先做生活方式自我判断，应先排除急症"],
+      "avoid": ["不要自行开车去医院；有急症表现时呼叫急救"],
+      "seek_medical_care": ["任何新发、反复或让你担心的胸痛都建议联系医生"],
+      "emergency": ["胸部压榨/紧缩/压迫感", "疼痛放射到下颌、左臂或背部", "胸痛伴恶心、出汗、头晕或气短", "胸痛持续不缓解"],
+      "source_ids": ["MedlinePlus Chest Pain"]
+    },
+    {
+      "id": "uti",
+      "display_name": "尿路感染样症状",
+      "aliases": ["尿痛", "尿频", "尿急", "尿路感染", "尿道疼", "小便疼"],
+      "possible_causes": ["尿路感染是常见原因，也可能与其他泌尿或生殖系统问题有关"],
+      "questions": ["是否尿痛、尿频、尿急或尿液混浊/发红/异味？", "有没有发热、腰背部或肋下疼痛？", "是否孕期、男性、儿童、糖尿病或免疫低下？"],
+      "self_care": ["补充水分，尽快安排尿检确认", "记录发热、腰痛和尿液变化"],
+      "avoid": ["不要仅靠多喝水替代检查和必要治疗"],
+      "seek_medical_care": ["怀疑尿路感染应联系医生做尿检", "孕期、男性、儿童、糖尿病或反复发作更应尽快就医"],
+      "emergency": ["发热伴腰背/肋下疼痛", "寒战", "严重虚弱", "意识异常"],
+      "source_ids": ["MedlinePlus UTI"]
+    },
+    {
+      "id": "allergy",
+      "display_name": "过敏样症状",
+      "aliases": ["过敏", "花粉", "鼻痒", "眼痒", "打喷嚏不停", "荨麻疹"],
+      "possible_causes": ["花粉、尘螨、霉菌、宠物皮屑、食物或药物等可触发过敏"],
+      "questions": ["是否接触了花粉、宠物、尘螨、食物或新药？", "是否有喘息、喉头紧、嘴唇/面部肿胀？", "症状是否每年同季节出现？"],
+      "self_care": ["减少接触可疑过敏原", "花粉季外出后洗手洗脸、更换衣物", "症状频繁时联系医生确认过敏类型和用药方案"],
+      "avoid": ["不要反复接触已知严重过敏原"],
+      "seek_medical_care": ["过敏反复影响生活", "出现喘息或哮喘加重", "需要确认药物或食物过敏"],
+      "emergency": ["呼吸困难", "喉头紧或吞咽困难", "面部/嘴唇/舌头肿胀", "头晕或晕厥"],
+      "source_ids": ["MedlinePlus Allergy"]
+    }
+  ]
+}

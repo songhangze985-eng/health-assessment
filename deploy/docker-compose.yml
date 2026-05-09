@@ -1,0 +1,17 @@
+services:
+  health-assessment:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: health-assessment:latest
+    container_name: health-assessment
+    restart: unless-stopped
+    environment:
+      HEALTH_STORE: /data/events.jsonl
+    ports:
+      - "8787:8787"
+    volumes:
+      - health_assessment_data:/data
+
+volumes:
+  health_assessment_data:

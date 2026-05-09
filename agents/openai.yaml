@@ -1,0 +1,6 @@
+interface:
+  display_name: "Health Assessment"
+  short_description: "Grounded Chinese health logging and reports"
+  default_prompt: "Use $health-assessment to record Chinese sleep, diet, exercise, symptoms, seasonal fruit advice, and reports with server-grounded, non-diagnostic replies."
+policy:
+  allow_implicit_invocation: true
