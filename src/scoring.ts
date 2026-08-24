@@ -142,7 +142,7 @@ function invertInstrument(score: number, max: number): number {
 }
 
 function pickActions(locale: Locale, result: Omit<AssessmentResult, "actions" | "seekCare">): string[] {
-  if (result.crisis.level === "urgent") {
+  if (result.crisis.level !== "none") {
     return locale === "en"
       ? ["Contact emergency services or a crisis line now", "Stay with someone you trust", "Do not use this tool as a plan"]
       : ["立刻拨打 120 或心理热线", "请和身边可信任的人待在一起", "不要把本工具当成应对计划"];

@@ -7,13 +7,13 @@ const DISCLAIMER_EN =
 
 const CRISIS_PATTERNS: RegExp[] = [
   /自杀/,
-  /不想活/,
+  /不想活(?!动)/,
   /活不下去/,
   /结束生命/,
   /伤害自己/,
   /自残/,
   /割腕/,
-  /跳楼/,
+  /跳楼(?!价)/,
   /\bsuicide\b/i,
   /\bkill myself\b/i,
   /\bwant to die\b/i,

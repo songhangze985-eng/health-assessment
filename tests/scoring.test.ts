@@ -40,8 +40,13 @@ describe("PHQ-9", () => {
   });
 
   test("item 9 = 1 is watch; 2 is urgent", () => {
-    const watch = assess({ ...base(), phq9: { items: [0, 0, 0, 0, 0, 0, 0, 0, 1] } });
+    const watch = assess({
+      ...base(),
+      phq9: { items: [0, 0, 0, 0, 0, 0, 0, 0, 1] },
+      lifestyle: { ...base().lifestyle, exerciseMinWeek: 80 },
+    });
     expect(watch.crisis.level).toBe("watch");
+    expect(watch.actions.join("")).not.toContain("走路");
     const urgent = assess({ ...base(), phq9: { items: [0, 0, 0, 0, 0, 0, 0, 0, 2] } });
     expect(urgent.crisis.level).toBe("urgent");
     expect(urgent.crisis.resources.some((r) => r.contact === "120")).toBe(true);
