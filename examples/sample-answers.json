@@ -1,0 +1,13 @@
+{
+  "locale": "zh",
+  "phq9": { "items": [1, 1, 2, 1, 0, 1, 1, 0, 0] },
+  "gad7": { "items": [1, 1, 1, 2, 0, 1, 0] },
+  "sleep": { "hours": 6.5, "latencyMin": 40, "awakenings": 2, "restedness": 3 },
+  "lifestyle": {
+    "heightCm": 170,
+    "weightKg": 68,
+    "exerciseMinWeek": 80,
+    "smoking": "never",
+    "alcoholUnitsWeek": 2
+  }
+}

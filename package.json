@@ -1,0 +1,17 @@
+{
+  "name": "health-assessment",
+  "version": "0.1.0",
+  "description": "Lightweight personal health assessment Agent Skill — PHQ-9, GAD-7, sleep, body, movement. Screening only.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "health-assessment": "src/cli.ts"
+  },
+  "scripts": {
+    "start": "bun src/cli.ts",
+    "score": "bun src/cli.ts score",
+    "checkin": "bun src/cli.ts checkin",
+    "trend": "bun src/cli.ts trend",
+    "test": "bun test"
+  }
+}
