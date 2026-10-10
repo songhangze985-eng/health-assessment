@@ -14,6 +14,6 @@
 默认目标，除非用户当次就要改：
 
 - `protein_g_per_kg`：1.6，来源 `literature_default_1.6_within_1.4_2.0`
-- `resistance_sessions_per_7d`：3，来源 `literature_default_within_2_to_3`
+- `resistance_sessions_per_7d`：3，来源 `literature_default_3_inside_2011_2_to_3_and_2026_at_least_2`
 
 用户要改时，先读 [../prompts/custom-standard.md](../prompts/custom-standard.md)。把档案写入 `settings/config.json`。
