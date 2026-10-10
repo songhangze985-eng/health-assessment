@@ -1,0 +1,9 @@
+.venv/
+.memory-path
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.env
+data/
+*.log

@@ -1,0 +1,146 @@
+{
+  "profile": {
+    "codename": "fixture",
+    "height_cm": 172,
+    "weight_kg": 75,
+    "age": 36,
+    "sex": "male",
+    "training_years": 0,
+    "injury": false
+  },
+  "sessions": [
+    {
+      "date": "2026-10-01",
+      "date_defaulted": false,
+      "red_flags": [],
+      "body_required": {
+        "protein_g": 120,
+        "resistance_sets": 3,
+        "resistance_load_kg": 41,
+        "overload": true
+      },
+      "psych_required": {
+        "execution_likert": 5,
+        "classification": "kept_and_changed"
+      },
+      "optional": {
+        "睡眠时长": 5,
+        "边界感": 5
+      }
+    },
+    {
+      "date": "2026-10-02",
+      "date_defaulted": false,
+      "red_flags": [],
+      "body_required": {
+        "protein_g": 120,
+        "resistance_sets": 3,
+        "resistance_load_kg": 42,
+        "overload": true
+      },
+      "psych_required": {
+        "execution_likert": 5,
+        "classification": "kept_and_changed"
+      },
+      "optional": {
+        "睡眠时长": 5,
+        "边界感": 5
+      }
+    },
+    {
+      "date": "2026-10-03",
+      "date_defaulted": false,
+      "red_flags": [],
+      "body_required": {
+        "protein_g": 120,
+        "resistance_sets": 3,
+        "resistance_load_kg": 43,
+        "overload": true
+      },
+      "psych_required": {
+        "execution_likert": 5,
+        "classification": "kept_and_changed"
+      },
+      "optional": {
+        "睡眠时长": 5,
+        "边界感": 5
+      }
+    },
+    {
+      "date": "2026-10-04",
+      "date_defaulted": false,
+      "red_flags": [],
+      "body_required": {
+        "protein_g": 120,
+        "resistance_sets": 3,
+        "resistance_load_kg": 44,
+        "overload": true
+      },
+      "psych_required": {
+        "execution_likert": 5,
+        "classification": "kept_and_changed"
+      },
+      "optional": {
+        "睡眠时长": 5,
+        "边界感": 5
+      }
+    },
+    {
+      "date": "2026-10-05",
+      "date_defaulted": false,
+      "red_flags": [],
+      "body_required": {
+        "protein_g": 120,
+        "resistance_sets": 3,
+        "resistance_load_kg": 45,
+        "overload": true
+      },
+      "psych_required": {
+        "execution_likert": 5,
+        "classification": "kept_and_changed"
+      },
+      "optional": {
+        "睡眠时长": 5,
+        "边界感": 5
+      }
+    },
+    {
+      "date": "2026-10-06",
+      "date_defaulted": false,
+      "red_flags": [],
+      "body_required": {
+        "protein_g": 120,
+        "resistance_sets": 3,
+        "resistance_load_kg": 46,
+        "overload": true
+      },
+      "psych_required": {
+        "execution_likert": 5,
+        "classification": "kept_and_changed"
+      },
+      "optional": {
+        "睡眠时长": 5,
+        "边界感": 5
+      }
+    },
+    {
+      "date": "2026-10-07",
+      "date_defaulted": false,
+      "red_flags": [],
+      "body_required": {
+        "protein_g": 120,
+        "resistance_sets": 3,
+        "resistance_load_kg": 47,
+        "overload": true
+      },
+      "psych_required": {
+        "execution_likert": 5,
+        "classification": "kept_and_changed"
+      },
+      "optional": {
+        "睡眠时长": 5,
+        "边界感": 5
+      }
+    }
+  ]
+}
