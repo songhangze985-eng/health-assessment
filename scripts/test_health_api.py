@@ -351,6 +351,94 @@ def test_menubar_title_uses_score_payload() -> None:
     assert "蛋白质" in report
 
 
+def test_dashboard_settings_switch_memory_without_touching_login_items() -> None:
+    import plistlib
+    import pwd
+
+    import generate_mac_assets
+
+    real_home = Path(pwd.getpwuid(os.getuid()).pw_dir)
+    real_plist = real_home / "Library" / "LaunchAgents" / "com.songhangze.healthassessment.plist"
+    existed = real_plist.exists()
+    home = Path(tempfile.mkdtemp(prefix="health-mac-home-"))
+    work = Path(tempfile.mkdtemp(prefix="health-mac-work-"))
+    origin = Path.cwd()
+    saved_env = {
+        key: os.environ.get(key)
+        for key in ("HOME", "HEALTH_MEMORY_PATH", "LLM_API_KEY", "LLM_API_URL", "LLM_MODEL", "HEALTH_SKIP_LAUNCH_AGENT")
+    }
+    server = None
+    try:
+        os.environ["HOME"] = str(home)
+        os.environ["HEALTH_SKIP_LAUNCH_AGENT"] = "1"
+        os.environ.pop("HEALTH_MEMORY_PATH", None)
+        os.chdir(work)
+        repo = health_api_server.MemoryRepository(str(work / "initial"))
+        server = health_api_server.make_server("127.0.0.1", 0, repo)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        base = f"http://127.0.0.1:{server.server_address[1]}"
+
+        with urllib.request.urlopen(base + "/ui", timeout=5) as response:
+            html = response.read().decode("utf-8")
+            assert "text/html" in response.headers.get("Content-Type", "")
+        assert "薄肌与黄毛" in html
+        assert "data.scores && data.scores[key]" in html
+        assert "total_score" not in html
+
+        status, settings = request_json(base, "GET", "/api/settings")
+        assert status == 200
+        assert str(home) in settings["memory_path"]
+
+        library = home / "custom-memory"
+        status, saved = request_json(
+            base,
+            "POST",
+            "/api/settings",
+            {
+                "memory_path": str(library),
+                "llm_api_key": "test-key",
+                "auto_start_on_login": True,
+                "profile": profile_body(),
+            },
+        )
+        assert status == 200, saved
+        assert saved["memory_path"] == str(library.resolve())
+        config_path = home / "Library" / "Application Support" / "HealthAssessment" / "config.json"
+        stored = json.loads(config_path.read_text(encoding="utf-8"))
+        assert stored["llm_api_key"] == "test-key"
+        assert stored["profile"]["height_cm"] == 172
+        assert os.environ["HEALTH_MEMORY_PATH"] == str(library.resolve())
+        plist_path = home / "Library" / "LaunchAgents" / "com.songhangze.healthassessment.plist"
+        plist = plistlib.loads(plist_path.read_bytes())
+        assert plist["Label"] == "com.songhangze.healthassessment"
+        assert plist["RunAtLoad"] is True
+        assert plist["KeepAlive"] is False
+        assert any(str(item).endswith("mac_menubar_pet.py") for item in plist["ProgramArguments"])
+        assert real_plist.exists() is existed
+
+        status, saved_profile = request_json(base, "POST", "/api/profile", profile_body())
+        assert status == 200, saved_profile
+        assert saved_profile["mode"] == "under7"
+        assert (library / "profile.json").is_file()
+        assert "llm_api_key" not in (library / "profile.json").read_text(encoding="utf-8")
+
+        png = generate_mac_assets.generate_squircle_png(32, is_template=False)
+        assert png.startswith(b"\x89PNG\r\n\x1a\n")
+        assert png[16:24] == (32).to_bytes(4, "big") + (32).to_bytes(4, "big")
+    finally:
+        if server is not None:
+            server.shutdown()
+            server.server_close()
+        os.chdir(origin)
+        for key, value in saved_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        _remove_tree(work)
+        _remove_tree(home)
+
+
 def test_non_loopback_host_is_rejected() -> None:
     try:
         health_api_server.make_server("0.0.0.0", 0)
@@ -371,6 +459,7 @@ def main() -> None:
         test_multiday_csv_same_day_priority_and_red_flag,
         test_spoken_checkin_covers_core_fields,
         test_menubar_title_uses_score_payload,
+        test_dashboard_settings_switch_memory_without_touching_login_items,
         test_non_loopback_host_is_rejected,
     ]
     for test in tests:

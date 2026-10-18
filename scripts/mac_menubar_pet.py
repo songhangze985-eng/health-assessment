@@ -19,17 +19,28 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
 
+import health_api_server
+import mac_dashboard_ui
+
 API_PORT = int(os.environ.get("HEALTH_API_PORT", "8765") or "8765")
 API_BASE = f"http://127.0.0.1:{API_PORT}"
 SCRIPT_DIR = Path(__file__).resolve().parent
 SERVER_SCRIPT = SCRIPT_DIR / "health_api_server.py"
 REPO_ROOT = SCRIPT_DIR.parent
+
+
+def asset_path(name: str) -> Path:
+    if getattr(sys, "frozen", False):
+        base = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+        return base / "assets" / name
+    return REPO_ROOT / "assets" / name
 
 try:
     import rumps  # type: ignore
@@ -45,6 +56,8 @@ class BackendProcessManager:
 
     def __init__(self) -> None:
         self.proc: subprocess.Popen[bytes] | None = None
+        self._httpd: Any = None
+        self._thread: threading.Thread | None = None
         atexit.register(self.stop)
 
     def is_alive(self) -> bool:
@@ -58,6 +71,9 @@ class BackendProcessManager:
     def ensure_running(self) -> bool:
         if self.is_alive():
             return True
+        mac_dashboard_ui.prepare_process_environment()
+        if getattr(sys, "frozen", False):
+            return self._start_embedded()
         if not SERVER_SCRIPT.is_file():
             return False
         env = os.environ.copy()
@@ -78,7 +94,32 @@ class BackendProcessManager:
                 return False
         return False
 
+    def _start_embedded(self) -> bool:
+        """PyInstaller replaces sys.executable with the app binary, so the API stays in-process."""
+        if self._thread is not None and self._thread.is_alive():
+            return self.is_alive()
+
+        def serve() -> None:
+            try:
+                self._httpd = health_api_server.make_server("127.0.0.1", API_PORT)
+                self._httpd.serve_forever()
+            except OSError:
+                self._httpd = None
+
+        self._thread = threading.Thread(target=serve, name="health-api", daemon=True)
+        self._thread.start()
+        for _ in range(40):
+            time.sleep(0.1)
+            if self.is_alive():
+                return True
+        return False
+
     def stop(self) -> None:
+        httpd = self._httpd
+        if httpd is not None:
+            self._httpd = None
+            httpd.shutdown()
+            httpd.server_close()
         if self.proc is None or self.proc.poll() is not None:
             return
         self.proc.terminate()
@@ -229,10 +270,20 @@ if HAS_RUMPS:
 
     class HealthMenuBarPet(rumps.App):
         def __init__(self) -> None:
-            super().__init__("🐾 健康助手", quit_button=None)
+            icon = asset_path("menubar_icon.png")
+            icon_file = str(icon) if icon.is_file() else None
+            super().__init__(
+                "HealthAssessment",
+                title="🐾 健康助手",
+                icon=icon_file,
+                template=True if icon_file else None,
+                quit_button=None,
+            )
             self.backend = BackendProcessManager()
+            self._opened_setup = False
             self.status_item = rumps.MenuItem("状态: 正在连接本地健康服务...")
             self.menu = [
+                rumps.MenuItem("打开健康助手主界面与设置...", callback=self.on_open_dashboard),
                 self.status_item,
                 None,
                 rumps.MenuItem("今日文字自述打卡", callback=self.on_text_checkin),
@@ -245,6 +296,16 @@ if HAS_RUMPS:
             self.backend.ensure_running()
             self.refresh_status()
             rumps.Timer(self._startup_greeting, 2).start()
+
+        def on_open_dashboard(self, _: Any) -> None:
+            if not self.backend.ensure_running():
+                macos_notify("健康桌宠", "主界面没有打开", "本地服务还没起来。")
+                return
+            mac_dashboard_ui.open_dashboard_window(f"{API_BASE}/ui")
+
+        @rumps.timer(20)
+        def poll_status(self, _: Any) -> None:
+            self.refresh_status()
 
         def refresh_status(self) -> dict[str, Any] | None:
             if not self.backend.ensure_running():
@@ -259,6 +320,9 @@ if HAS_RUMPS:
                 return None
             self.title = format_menubar_title(data)
             self.status_item.title = "状态: " + status_line(data)
+            if data.get("mode") == "blocked_profile" and not self._opened_setup:
+                self._opened_setup = True
+                mac_dashboard_ui.open_dashboard_window(f"{API_BASE}/ui")
             return data
 
         @rumps.timer(7200)
@@ -367,6 +431,9 @@ def main() -> None:
     if not HAS_RUMPS:
         print("请先安装菜单栏库 rumps：\n  python3 -m pip install --user rumps\n然后运行：\n  python3 scripts/mac_menubar_pet.py")
         sys.exit(1)
+    if not mac_dashboard_ui.acquire_pet_lock():
+        print("健康桌宠已经在运行。")
+        sys.exit(0)
     HealthMenuBarPet().run()
 
 

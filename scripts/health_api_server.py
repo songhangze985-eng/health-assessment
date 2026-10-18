@@ -22,6 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+import mac_dashboard_ui
 import score_checkin
 
 MAX_BODY_BYTES = 12 * 1024 * 1024
@@ -693,6 +694,14 @@ class HealthAssistantHTTPHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_html(self, html: str) -> None:
+        body = html.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _path(self) -> str:
         return self.path.split("?", 1)[0]
 
@@ -738,6 +747,12 @@ class HealthAssistantHTTPHandler(BaseHTTPRequestHandler):
             missing = score_checkin.missing_profile(profile)
             self._send_json({"profile": profile, "missing_profile": missing, "complete": not missing})
             return
+        if path == "/api/settings":
+            self._send_json(mac_dashboard_ui.read_app_config())
+            return
+        if path == "/ui":
+            self._send_html(mac_dashboard_ui.DASHBOARD_HTML)
+            return
         self._send_json({"error": "Not Found"}, 404)
 
     def do_POST(self) -> None:
@@ -757,6 +772,8 @@ class HealthAssistantHTTPHandler(BaseHTTPRequestHandler):
                 self._handle_bind(req_json)
             elif path == "/api/profile":
                 self._handle_profile(req_json)
+            elif path == "/api/settings":
+                self._handle_settings(req_json)
             else:
                 self._send_json({"error": "Unknown POST endpoint"}, 404)
         except RuntimeError as exc:
@@ -800,6 +817,16 @@ class HealthAssistantHTTPHandler(BaseHTTPRequestHandler):
         evaluation["vpet_state"] = map_score_to_vpet_state(evaluation)
         evaluation["profile"] = saved
         self._send_json(evaluation)
+
+    def _handle_settings(self, req_json: dict[str, Any]) -> None:
+        saved = mac_dashboard_ui.save_app_config(req_json)
+        repo = MemoryRepository(str(saved["memory_path"]))
+        type(self).repo = repo
+        self.repo = repo
+        extractor = LLMExtractor()
+        type(self).extractor = extractor
+        self.extractor = extractor
+        self._send_json({"ok": True, "settings": mac_dashboard_ui.read_app_config(), "memory_path": str(repo.root)})
 
     def _handle_text(self, req_json: dict[str, Any]) -> None:
         extracted = self.extractor.extract_from_text_or_image(
@@ -924,6 +951,7 @@ def api_port() -> int:
 
 
 def run_server(host: str = DEFAULT_HOST, port: int | None = None) -> None:
+    mac_dashboard_ui.prepare_process_environment()
     chosen = DEFAULT_PORT if port is None else port
     server = make_server(host, chosen)
     print(f"[Health-Assessment API] http://{host}:{chosen}")
