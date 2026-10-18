@@ -17,6 +17,7 @@ import os
 import re
 import urllib.error
 import urllib.request
+from urllib.parse import parse_qs, urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -723,7 +724,9 @@ class HealthAssistantHTTPHandler(BaseHTTPRequestHandler):
         if repo is None:
             return
         if path == "/api/greeting":
-            self._send_json(build_vpet_greeting(repo))
+            query = parse_qs(urlsplit(self.path).query)
+            requested = query.get("date") or [None]
+            self._send_json(build_vpet_greeting(repo, requested[0]))
             return
         if path == "/api/score":
             result = score_library(repo)
