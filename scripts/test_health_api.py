@@ -13,6 +13,7 @@ import urllib.request
 from pathlib import Path
 
 import health_api_server
+import mac_menubar_pet
 
 
 def write_profile(root: Path) -> None:
@@ -315,6 +316,41 @@ def test_spoken_checkin_covers_core_fields() -> None:
     assert extracted["optional"]["stress_relief"] == 1.0
 
 
+def test_menubar_title_uses_score_payload() -> None:
+    assert mac_menubar_pet.API_PORT == 8765 or "HEALTH_API_PORT" in os.environ
+    assert mac_menubar_pet.format_menubar_title({"mode": "redflag"}) == "🚨 红旗预警"
+    assert mac_menubar_pet.format_menubar_title({"mode": "blocked_profile"}) == "📋 待建档"
+    assert (
+        mac_menubar_pet.format_menubar_title(
+            {
+                "mode": "under7",
+                "distinct_dates": 4,
+                "daily_progress": {"required_completion_ratio": 0.8},
+            }
+        )
+        == "😄 4/7天(80%)"
+    )
+    assert (
+        mac_menubar_pet.format_menubar_title(
+            {"mode": "scored", "scores": {"total": {"score": 168}, "body": {"score": 90}, "psych": {"score": 78}}}
+        )
+        == "💪 168/200分"
+    )
+    report = mac_menubar_pet.format_score_report(
+        {
+            "mode": "under7",
+            "distinct_dates": 1,
+            "daily_progress": {
+                "required_completion_ratio": 0.4,
+                "missing_required_fields": ["protein_g (今日蛋白质摄入克数)"],
+                "target_date": "2026-10-18",
+            },
+        }
+    )
+    assert "1 / 7" in report
+    assert "蛋白质" in report
+
+
 def test_non_loopback_host_is_rejected() -> None:
     try:
         health_api_server.make_server("0.0.0.0", 0)
@@ -334,6 +370,7 @@ def main() -> None:
         test_profile_bind_and_rejection,
         test_multiday_csv_same_day_priority_and_red_flag,
         test_spoken_checkin_covers_core_fields,
+        test_menubar_title_uses_score_payload,
         test_non_loopback_host_is_rejected,
     ]
     for test in tests:

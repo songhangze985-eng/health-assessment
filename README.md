@@ -131,6 +131,19 @@ python scripts/health_api_server.py
 | `POST` | `/api/checkin/file` | Base64 的 CSV、Excel 或图片 |
 | `GET` | `/api/score` | 当前窗口的评估和 `vpet_state` |
 
+## macOS 顶部状态栏轻桌宠
+
+Mac 上用菜单栏宠物，不启动 Windows 版 VPet。它连接同一个 `127.0.0.1:8765`；如果服务没开，会在后台拉起 `scripts/health_api_server.py`，退出时只关掉自己拉起的那个进程。
+
+```bash
+python3 -m pip install --user rumps
+python3 scripts/mac_menubar_pet.py
+```
+
+要直接读 `.xlsx` 再加 `python3 -m pip install --user openpyxl`。端口仍由 `HEALTH_API_PORT` 控制，默认 8765。
+
+状态栏会显示 `🐾 0/7天(0%)`、`😄 6/7天(100%)`、`💪 168/200分` 或 `🚨 红旗预警`。菜单可以文字打卡、用 Finder 选择 CSV / Excel / 图片、查看 7 天报告。每 2 小时用系统通知追问一次缺项。
+
 ## 桌宠插件
 
 `vpet_bridge/` 是插件源码，不是已经编译好的模组。在 Windows 上用该目录的 csproj 生成 DLL 后，与 `info.lps` 一起放进 VPet 模组目录。`PluginName` 是 `HealthAssessment`，必须和 `info.lps` 里的模组名一致。
