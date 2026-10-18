@@ -176,6 +176,84 @@ def test_injury_note_does_not_stop_score() -> None:
     assert "备注" in result["injury_note"]
 
 
+def test_calendar_span_lowers_resistance_expectation() -> None:
+    sessions = [day(index) for index in (1, 2, 3, 4, 5, 6, 19)]
+    result = run({"profile": profile(), "sessions": sessions})
+    assert result["mode"] == "scored", result
+    assert result["distinct_dates"] == 7
+    assert result["calendar_span_days"] == 19
+    assert result["scores"]["body_required"]["parts"]["抗阻"] < 1
+
+
+def test_window_span_counts_when_sessions_are_dense() -> None:
+    result = run(
+        {
+            "profile": profile(),
+            "window": {"start": "2026-09-18", "end": "2026-10-07"},
+            "sessions": [day(index) for index in range(1, 8)],
+        }
+    )
+    assert result["calendar_span_days"] == 20
+    assert result["scores"]["body_required"]["parts"]["抗阻"] < 1
+
+
+def test_raw_text_red_flag_stops() -> None:
+    sessions = [day(index) for index in range(1, 8)]
+    sessions[0]["red_flags"] = []
+    sessions[0]["note"] = "今天胸痛，先停一下"
+    result = run({"profile": profile(), "sessions": sessions})
+    assert result["mode"] == "redflag"
+    assert result["scores"] is None
+    assert "胸痛" in result["red_flags"]
+
+
+def test_negated_red_flag_does_not_stop() -> None:
+    sessions = [day(index) for index in range(1, 8)]
+    sessions[0]["note"] = "无胸痛，没有呼吸困难"
+    result = run({"profile": profile(), "sessions": sessions})
+    assert result["mode"] == "scored"
+    assert result["scores"]["total"]["score"] == 200
+
+
+def test_extended_red_flag_in_raw_text() -> None:
+    sessions = [day(index) for index in range(1, 8)]
+    sessions[3]["raw_text"] = "膝盖出现关节急性肿胀"
+    result = run({"profile": profile(), "sessions": sessions})
+    assert result["mode"] == "redflag"
+    assert "关节急性肿胀" in result["red_flags"]
+
+
+def test_under7_reports_daily_gaps() -> None:
+    result = run({"profile": profile(), "sessions": [day(1), day(2)]})
+    progress = result["daily_progress"]
+    assert progress["target_date"] == "2026-10-02"
+    assert progress["required_completion_ratio"] == 1
+    assert progress["missing_required_fields"] == []
+
+
+def test_alias_fields_still_total_200() -> None:
+    sessions = []
+    for index in range(1, 8):
+        sessions.append(
+            day(
+                index,
+                body_required={
+                    "protein_g": 120,
+                    "resistance_done": True,
+                    "progressive_overload": True,
+                },
+                psych_required={
+                    "self_rating_1_to_5": 5,
+                    "feedback_category": "kept_and_changed",
+                },
+                optional={"sleep_quality": 1, "stress_relief": 1},
+            )
+        )
+    result = run({"profile": profile(), "sessions": sessions})
+    assert result["mode"] == "scored", result
+    assert result["scores"]["total"]["score"] == 200
+
+
 def test_fixture_file_matches_full_score() -> None:
     fixture = json.loads((FIXTURES / "full-7.json").read_text(encoding="utf-8"))
     result = run(fixture)
@@ -200,6 +278,13 @@ def main() -> None:
         test_defaulted_date_counts_as_one_day,
         test_blocked_profile,
         test_injury_note_does_not_stop_score,
+        test_calendar_span_lowers_resistance_expectation,
+        test_window_span_counts_when_sessions_are_dense,
+        test_raw_text_red_flag_stops,
+        test_negated_red_flag_does_not_stop,
+        test_extended_red_flag_in_raw_text,
+        test_under7_reports_daily_gaps,
+        test_alias_fields_still_total_200,
         test_fixture_file_matches_full_score,
     ]
     for test in tests:

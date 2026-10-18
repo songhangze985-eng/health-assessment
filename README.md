@@ -43,7 +43,7 @@
 
 |      | Component       | Details                              |
 | :--- | :-------------- | :----------------------------------- |
-| ⚙️  | **Architecture**  | <ul><li>单技能（skill）结构，围绕 <code>scripts/score_checkin.py</code> 单一评分入口</li><li>数据流：用户打卡记录 → 本地个人库 → 评分脚本 → 总分（≥7 个不同日期才输出）</li><li>概念层：**薄肌**（蛋白质 / 抗阻 / 超负荷）+ **黄毛**（执行自评分）</li><li>无服务端、无数据库，纯本地文件驱动</li></ul> |
+| ⚙️  | **Architecture**  | <ul><li>单技能（skill）结构，围绕 <code>scripts/score_checkin.py</code> 单一评分入口</li><li>数据流：用户打卡记录 → 本地个人库 → 评分脚本 → 总分（≥7 个不同日期才输出）</li><li>概念层：**薄肌**（蛋白质 / 抗阻 / 超负荷）+ **黄毛**（执行自评分）</li><li>评分仍由本地脚本完成；可选 API 只监听 127.0.0.1，用来解析表格和给桌宠提供状态</li></ul> |
 | 🔩 | **Code Quality**  | <ul><li>评分逻辑**唯一来源**：<code>scripts/score_checkin.py</code>，禁止外部手算</li><li>职责单一：脚本只算分，不做诊断、不开药</li><li>输入校验：日期去重计数，< 7 个不同日期不出总分</li></ul> |
 | 📄 | **Documentation** | <ul><li>README 明确边界：**不写**财富、加密、买房、婚姻</li><li>记录归属：每人自己的库，互不混用</li><li>评价处理规则：可测量的评价 → 留下并改行为；人身攻击 → 丢掉</li></ul> |
 | 🔌 | **Integrations**  | <ul><li>依赖 <code>full-7.json</code> 作为数据/配置载体</li><li>Python 运行时（<code>python</code> / <code>py</code>）</li><li>JSON 读写作为唯一持久化通道</li></ul> |

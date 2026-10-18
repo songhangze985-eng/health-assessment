@@ -15,7 +15,7 @@ description: >-
 
 1. 读 [workflows/00-bind-library.md](workflows/00-bind-library.md)，确定这个人的记忆库。
 2. 档案缺字段时读 [workflows/01-create-profile.md](workflows/01-create-profile.md)，停在补字段，不估算。
-3. 输入里出现红旗时只读 [workflows/06-red-flag.md](workflows/06-red-flag.md)。红旗：胸痛、昏厥、自伤、自行停药、急性剧痛。
+3. 输入里出现红旗时只读 [workflows/06-red-flag.md](workflows/06-red-flag.md)。红旗：胸痛、昏厥、晕厥、自伤、轻生、自行停药、急性剧痛、呼吸困难、异常心悸、骨裂、关节急性肿胀。
 4. 有文档或表格时读 [workflows/03-analyze-file.md](workflows/03-analyze-file.md)。没有文件时读 [workflows/02-checkin.md](workflows/02-checkin.md)。
 5. 要出分时读 [workflows/04-score.md](workflows/04-score.md)。只回顾旧记录时读 [workflows/05-read-memory.md](workflows/05-read-memory.md)。
 
@@ -28,6 +28,10 @@ description: >-
 ## 记忆库
 
 路径第一次要问，写入仓库外的库，并在本仓库 `.memory-path` 只记指针。`.memory-path` 不提交。授予写入后只追加 `sessions/` 和 `analyses/`，不改旧文件。回顾时只读。布局见 [workflows/00-bind-library.md](workflows/00-bind-library.md)。
+
+## 本地接口
+
+表格导入或桌宠状态用 `py -3 scripts/health_api_server.py`。它只听 `127.0.0.1:8765`。记忆库仍由 `.memory-path` 或 `HEALTH_MEMORY_PATH` 指出，不在仓库里猜路径，也不补档案数字。
 
 ## 验收
 

@@ -20,7 +20,30 @@ REQUIRED_PROFILE = (
     "injury",
 )
 RED_FLAGS = ("胸痛", "昏厥", "自伤", "自行停药", "急性剧痛")
+EXTENDED_RED_FLAGS = ("呼吸困难", "异常心悸", "晕厥", "轻生", "骨裂", "关节急性肿胀")
+ALL_RED_FLAGS = RED_FLAGS + EXTENDED_RED_FLAGS
+NEGATION_MARKS = ("没有", "无", "否认", "未出现", "未诉")
+TEXT_FIELDS = ("raw_text", "text", "note")
 VALID_CLASSIFICATION = {"kept_and_changed", "discarded_insult"}
+OPTIONAL_ALIASES = {
+    "sleep_quality": "睡眠时长",
+    "anti_inflammatory_diet": "饮食质量",
+    "hydration": "总饮水量",
+    "cardio_activity": "日常步数",
+    "load_recovery": "恢复干预",
+    "vital_signs": "基础机能",
+    "emotional_stability": "情绪波动",
+    "stress_relief": "日常压力",
+    "focus_state": "注意力",
+    "self_care": "自我照顾",
+}
+GAP_LABELS = {
+    "蛋白质": "protein_g (今日蛋白质摄入克数)",
+    "抗阻": "resistance_done (今日抗阻训练情况)",
+    "超负荷": "progressive_overload (是否实现渐进超负荷)",
+    "黄毛自评分": "self_rating_1_to_5 (今日执行力/心理状态 1-5 自评)",
+    "评价分类": "feedback_category (外界评价处理分类)",
+}
 BODY_SHARE = 80.0 / 3.0
 PSYCH_PART = 40.0
 OPTIONAL_POOL = 20.0
@@ -124,6 +147,8 @@ def session_protein_ratio(session: dict[str, Any], target_g: float) -> tuple[flo
         grams = float(body["protein_g"])
         ratio = 1.0 if target_g <= 0 else min(1.0, grams / target_g)
         return ratio, "number"
+    if body.get("protein_ratio") is not None:
+        return min(1.0, max(0.0, float(body["protein_ratio"]))), "ratio"
     ratio = likert_ratio(body.get("protein_likert"))
     if ratio is None:
         return None, "missing"
@@ -138,7 +163,25 @@ def session_has_resistance(session: dict[str, Any]) -> tuple[bool, str]:
         return True, "number"
     if likert_ratio(body.get("resistance_likert")) is not None:
         return True, "likert"
+    if body.get("resistance_done") is True:
+        return True, "done"
+    minutes = body.get("resistance_minutes")
+    if isinstance(minutes, (int, float)) and not isinstance(minutes, bool) and float(minutes) > 0:
+        return True, "minutes"
     return False, "missing"
+
+
+def overload_value(body: dict[str, Any]) -> float | None:
+    if isinstance(body.get("overload"), bool):
+        return 1.0 if body["overload"] else 0.0
+    if isinstance(body.get("progressive_overload"), bool):
+        return 1.0 if body["progressive_overload"] else 0.0
+    if isinstance(body.get("progressive_overload"), (int, float)) and not isinstance(body.get("progressive_overload"), bool):
+        return min(1.0, max(0.0, float(body["progressive_overload"])))
+    likert = likert_ratio(body.get("overload_likert"))
+    if likert is not None:
+        return float(likert)
+    return None
 
 
 def overload_observations(sessions: list[dict[str, Any]]) -> list[float]:
@@ -146,10 +189,9 @@ def overload_observations(sessions: list[dict[str, Any]]) -> list[float]:
     previous_load: float | None = None
     for session in sessions:
         body = session.get("body_required") or {}
-        if isinstance(body.get("overload"), bool):
-            ratios.append(1.0 if body["overload"] else 0.0)
-        elif likert_ratio(body.get("overload_likert")) is not None:
-            ratios.append(float(likert_ratio(body.get("overload_likert"))))
+        observed = overload_value(body)
+        if observed is not None:
+            ratios.append(observed)
         elif body.get("resistance_load_kg") is not None and previous_load is not None:
             current = float(body["resistance_load_kg"])
             ratios.append(1.0 if current > previous_load else 0.0)
@@ -198,13 +240,151 @@ def in_window(day: date, window: dict[str, Any] | None) -> bool:
     return True
 
 
-def collect_red_flags(sessions: list[dict[str, Any]]) -> list[str]:
-    found: list[str] = []
+def keyword_is_asserted(text: str, keyword: str) -> bool:
+    start = 0
+    while True:
+        index = text.find(keyword, start)
+        if index < 0:
+            return False
+        prefix = text[max(0, index - 3) : index]
+        if any(prefix.endswith(mark) for mark in NEGATION_MARKS):
+            start = index + len(keyword)
+            continue
+        return True
+
+
+def collect_red_flag_details(sessions: list[dict[str, Any]]) -> list[dict[str, str]]:
+    found: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
     for session in sessions:
+        day = str(session.get("date", "unknown"))
         for flag in session.get("red_flags") or []:
-            if flag in RED_FLAGS and flag not in found:
-                found.append(flag)
+            flag_text = str(flag).strip()
+            if flag_text in ALL_RED_FLAGS and (day, flag_text) not in seen:
+                seen.add((day, flag_text))
+                found.append({"date": day, "flag": flag_text, "source": "explicit"})
+        blobs = [str(session.get(field) or "") for field in TEXT_FIELDS]
+        combined = " ".join(part for part in blobs if part.strip())
+        if not combined.strip():
+            continue
+        for keyword in ALL_RED_FLAGS:
+            if keyword_is_asserted(combined, keyword) and (day, keyword) not in seen:
+                seen.add((day, keyword))
+                found.append({"date": day, "flag": keyword, "source": "text_scan"})
     return found
+
+
+def collect_red_flags(sessions: list[dict[str, Any]]) -> list[str]:
+    flags: list[str] = []
+    for item in collect_red_flag_details(sessions):
+        if item["flag"] not in flags:
+            flags.append(item["flag"])
+    return flags
+
+
+def compute_calendar_span(
+    sessions: list[dict[str, Any]],
+    window: dict[str, Any] | None = None,
+) -> tuple[int, int]:
+    parsed: list[date] = []
+    raw_days: set[str] = set()
+    for item in sessions:
+        raw = str(item.get("date", "")).strip()[:10]
+        if not raw:
+            continue
+        raw_days.add(raw)
+        parsed.append(parse_day(raw))
+    distinct = len(raw_days)
+    if not parsed:
+        return distinct, max(distinct, 1)
+    earliest = min(parsed)
+    latest = max(parsed)
+    if window:
+        if window.get("start"):
+            window_start = parse_day(str(window["start"])[:10])
+            if window_start < earliest:
+                earliest = window_start
+        if window.get("end"):
+            window_end = parse_day(str(window["end"])[:10])
+            if window_end > latest:
+                latest = window_end
+    span = max((latest - earliest).days + 1, distinct, 1)
+    return distinct, span
+
+
+def alias_optional_value(canonical: str, raw: Any) -> Any:
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return raw
+    number = float(raw)
+    if canonical == "睡眠时长" and 0 <= number <= 1:
+        return {"hours": number * 7.0}
+    if 0 <= number <= 1:
+        return {"actual": number, "target": 1}
+    return raw
+
+
+def normalize_session(session: dict[str, Any]) -> dict[str, Any]:
+    item = dict(session)
+    if item.get("date"):
+        item["date"] = str(item["date"]).strip()[:10]
+    body = dict(item.get("body_required") or {})
+    if "overload" not in body and "progressive_overload" in body:
+        body["overload"] = body["progressive_overload"]
+    item["body_required"] = body
+    psych = dict(item.get("psych_required") or {})
+    if psych.get("execution_likert") is None:
+        if psych.get("self_rating_1_to_5") is not None:
+            psych["execution_likert"] = psych["self_rating_1_to_5"]
+        elif psych.get("likert") is not None:
+            psych["execution_likert"] = psych["likert"]
+    if not psych.get("classification") and psych.get("feedback_category"):
+        psych["classification"] = psych["feedback_category"]
+    item["psych_required"] = psych
+    optional = dict(item.get("optional") or {})
+    for side in ("body_optional", "psych_optional"):
+        extra = item.get(side) or {}
+        if isinstance(extra, dict):
+            for key, value in extra.items():
+                if key not in optional and value is not None:
+                    optional[key] = value
+    for alias, canonical in OPTIONAL_ALIASES.items():
+        if alias not in optional or optional[alias] is None:
+            continue
+        if optional.get(canonical) is None:
+            optional[canonical] = alias_optional_value(canonical, optional[alias])
+    item["optional"] = optional
+    return item
+
+
+def execution_ratio(psych: dict[str, Any]) -> float | None:
+    for key in ("execution_likert", "self_rating_1_to_5", "likert"):
+        ratio = likert_ratio(psych.get(key))
+        if ratio is not None:
+            return ratio
+    return None
+
+
+def inspect_daily_gaps(
+    sessions: list[dict[str, Any]],
+    target_date: str | None = None,
+) -> dict[str, Any]:
+    normalized = [normalize_session(item) for item in sessions]
+    if not target_date:
+        dated = [str(item.get("date")) for item in normalized if item.get("date")]
+        target_date = max(dated) if dated else ""
+    day_sessions = [item for item in normalized if item.get("date") == target_date]
+    gaps = required_gaps(day_sessions, 1.0)
+    recorded: list[str] = []
+    for item in day_sessions:
+        for key, value in (item.get("optional") or {}).items():
+            if value is not None and key not in OPTIONAL_ALIASES and key not in recorded:
+                recorded.append(key)
+    return {
+        "target_date": target_date,
+        "required_completion_ratio": r2((5 - len(gaps)) / 5.0),
+        "missing_required_fields": [GAP_LABELS[gap] for gap in gaps],
+        "recorded_optional_fields": recorded,
+    }
 
 
 def required_gaps(sessions: list[dict[str, Any]], target_g: float) -> list[str]:
@@ -215,14 +395,19 @@ def required_gaps(sessions: list[dict[str, Any]], target_g: float) -> list[str]:
         gaps.append("抗阻")
     if not overload_observations(sessions):
         gaps.append("超负荷")
-    if not any(likert_ratio((item.get("psych_required") or {}).get("execution_likert")) is not None for item in sessions):
+    if not any(execution_ratio(item.get("psych_required") or {}) is not None for item in sessions):
         gaps.append("黄毛自评分")
-    if not any((item.get("psych_required") or {}).get("classification") for item in sessions):
+    if not any(
+        (item.get("psych_required") or {}).get("classification")
+        or (item.get("psych_required") or {}).get("feedback_category")
+        for item in sessions
+    ):
         gaps.append("评价分类")
     return gaps
 
 
 def score_optional(sessions: list[dict[str, Any]], keys: tuple[str, ...]) -> dict[str, Any]:
+    # 写过的小项平分 20。单项封顶会让「每侧只有一个选填」的 200 分验收失效，所以这里不封顶。
     grouped: dict[str, list[float]] = defaultdict(list)
     for session in sessions:
         optional = session.get("optional") or {}
@@ -247,13 +432,18 @@ def score_optional(sessions: list[dict[str, Any]], keys: tuple[str, ...]) -> dic
     return {"status": "scored", "score": r2(total), "items": items}
 
 
-def score_body_required(sessions: list[dict[str, Any]], profile: dict[str, Any]) -> dict[str, Any]:
+def score_body_required(
+    sessions: list[dict[str, Any]],
+    profile: dict[str, Any],
+    calendar_span_days: int | None = None,
+) -> dict[str, Any]:
     target_g, source = protein_target(profile)
     protein = [session_protein_ratio(item, target_g)[0] for item in sessions]
     protein = [item for item in protein if item is not None]
     resistance_days = sum(1 for item in sessions if session_has_resistance(item)[0])
-    span = max(len({item["date"] for item in sessions}), 1)
-    expected = resistance_per_7d(profile) * (span / 7.0)
+    if calendar_span_days is None:
+        _distinct, calendar_span_days = compute_calendar_span(sessions)
+    expected = resistance_per_7d(profile) * (calendar_span_days / 7.0)
     overload = overload_observations(sessions)
     parts = {
         "蛋白质": None if not protein else mean(protein),
@@ -284,10 +474,10 @@ def score_psych_required(sessions: list[dict[str, Any]]) -> dict[str, Any]:
     classes = []
     for session in sessions:
         psych = session.get("psych_required") or {}
-        ratio = likert_ratio(psych.get("execution_likert"))
+        ratio = execution_ratio(psych)
         if ratio is not None:
             ratings.append(ratio)
-        label = psych.get("classification")
+        label = psych.get("classification") or psych.get("feedback_category")
         if label in VALID_CLASSIFICATION:
             classes.append(1.0)
         elif label == "invalid":
@@ -380,22 +570,31 @@ def score_payload(payload: dict[str, Any]) -> dict[str, Any]:
             "next_steps": next_steps("blocked_profile", [], {}, {}),
         }
         return result
+    window = payload.get("window")
     sessions = []
     for item in payload.get("sessions") or []:
-        day = parse_day(item["date"])
-        if in_window(day, payload.get("window")):
-            sessions.append(item)
+        normalized = normalize_session(item)
+        day = parse_day(normalized["date"])
+        if in_window(day, window):
+            sessions.append(normalized)
     sessions.sort(key=lambda item: item["date"])
-    flags = collect_red_flags(sessions)
+    flag_details = collect_red_flag_details(sessions)
+    flags = []
+    for item in flag_details:
+        if item["flag"] not in flags:
+            flags.append(item["flag"])
     target_g, _source = protein_target(profile)
     gaps = required_gaps(sessions, target_g)
     dates = sorted({item["date"] for item in sessions})
+    distinct_dates, calendar_span_days = compute_calendar_span(sessions, window)
     if flags:
         return {
             "mode": "redflag",
             "red_flags": flags,
+            "red_flag_details": flag_details,
             "dates": dates,
-            "distinct_dates": len(dates),
+            "distinct_dates": distinct_dates,
+            "calendar_span_days": calendar_span_days,
             "scores": None,
             "next_steps": next_steps("redflag", gaps, {}, {}),
             "note": "有伤病只作档案备注，不在这里停分。停分只来自红旗。",
@@ -403,7 +602,8 @@ def score_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if len(dates) < 7:
         return {
             "mode": "under7",
-            "distinct_dates": len(dates),
+            "distinct_dates": distinct_dates,
+            "calendar_span_days": calendar_span_days,
             "dates": dates,
             "raw_sessions": [
                 {
@@ -415,11 +615,12 @@ def score_payload(payload: dict[str, Any]) -> dict[str, Any]:
                 for item in sessions
             ],
             "required_gaps": gaps,
+            "daily_progress": inspect_daily_gaps(sessions, dates[-1] if dates else None),
             "scores": None,
             "label": "未满 7 天，不可统计分析",
             "next_steps": next_steps("under7", gaps, {}, {}),
         }
-    body_required = score_body_required(sessions, profile)
+    body_required = score_body_required(sessions, profile, calendar_span_days)
     psych_required = score_psych_required(sessions)
     body_optional = score_optional(sessions, BODY_OPTIONAL)
     psych_optional = score_optional(sessions, PSYCH_OPTIONAL)
@@ -440,7 +641,8 @@ def score_payload(payload: dict[str, Any]) -> dict[str, Any]:
             gap_keys.append("评价分类")
     return {
         "mode": "scored",
-        "distinct_dates": len(dates),
+        "distinct_dates": distinct_dates,
+        "calendar_span_days": calendar_span_days,
         "dates": dates,
         "scores": {
             "body_required": body_required,
@@ -453,8 +655,13 @@ def score_payload(payload: dict[str, Any]) -> dict[str, Any]:
         },
         "conclusion": names,
         "next_steps": next_steps("scored", gap_keys, body_required, psych_required),
+        "daily_progress": inspect_daily_gaps(sessions, dates[-1] if dates else None),
         "injury_note": "档案写了有伤病，只作备注，本轮不因此停分。" if profile.get("injury") else "",
     }
+
+
+def evaluate_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return score_payload(payload)
 
 
 def main() -> None:
