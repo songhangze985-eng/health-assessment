@@ -31,7 +31,7 @@ description: >-
 
 ## 本地接口
 
-表格导入或桌宠状态用 `py -3 scripts/health_api_server.py`。它只听 `127.0.0.1:8765`。记忆库仍由 `.memory-path` 或 `HEALTH_MEMORY_PATH` 指出，不在仓库里猜路径，也不补档案数字。
+表格导入或桌宠状态用 `py -3 scripts/health_api_server.py`。默认只听 `127.0.0.1:8765`，端口可用 `HEALTH_API_PORT` 改。记忆库先看调用参数和 `HEALTH_MEMORY_PATH`，再看 `.memory-path`；都没有时才用仓库下的 `memory_store/`。对话里认库仍要先问路径。档案缺字段时不补数字。`POST /api/bind-library` 写指针，`GET /api/profile` 与 `POST /api/profile` 读写档案。
 
 ## 验收
 

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>VPet.Plugin.HealthAssessment</AssemblyName>
+    <RootNamespace>VPet.Plugin.HealthAssessment</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="VPet-Simulator.Core" Version="1.1.*" />
+    <PackageReference Include="VPet-Simulator.Windows.Interface" Version="1.1.*" />
+  </ItemGroup>
+</Project>

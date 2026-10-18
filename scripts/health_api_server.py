@@ -24,15 +24,26 @@ from typing import Any
 import score_checkin
 
 MAX_BODY_BYTES = 12 * 1024 * 1024
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 8765
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+VALID_SEX = {"female", "male", "other"}
+VALID_FEEDBACK = {"kept_and_changed", "discarded_insult", "invalid"}
 
 COLUMN_ALIASES: dict[str, tuple[str, ...]] = {
     "date": ("记录日期", "日期", "date", "start_time"),
-    "sleep_hours": ("总睡眠时长", "睡眠时长", "睡眠(小时)", "sleep_duration", "sleep_hours"),
-    "steps": ("今日步数", "步数", "step_count", "steps"),
-    "resting_hr": ("静息心率", "平均心率", "resting_heart_rate", "resting_hr"),
-    "resistance_minutes": ("力量训练", "抗阻时长", "无氧训练(分钟)", "strength_training", "resistance_minutes"),
+    "sleep_hours": ("总睡眠时长", "睡眠时长", "睡眠(小时)", "sleep_duration", "sleep_hours", "sleep_quality"),
+    "steps": ("今日步数", "日常步数", "步数", "step_count", "steps", "cardio_activity"),
+    "resting_hr": ("静息心率", "平均心率", "resting_heart_rate", "resting_hr", "vital_signs"),
+    "resistance_minutes": ("无氧训练(分钟)", "抗阻时长", "力量训练", "strength_training", "resistance_minutes"),
+    "resistance_done": ("是否抗阻", "抗阻完成", "resistance_done"),
     "protein_g": ("蛋白质(g)", "蛋白质", "protein_g", "protein"),
+    "progressive_overload": ("渐进超负荷", "超负荷", "progressive_overload"),
+    "self_rating": ("执行力自评", "心情评分", "自评", "self_rating_1_to_5"),
+    "feedback_category": ("评价分类", "feedback_category"),
+    "anti_inflammatory_diet": ("抗炎饮食", "anti_inflammatory_diet"),
+    "stress_relief": ("压力缓解", "stress_relief"),
+    "focus_state": ("专注力状态", "专注力", "focus_state"),
 }
 
 WEARABLE_BODY = {"resistance_minutes", "resistance_done", "protein_g", "protein_ratio"}
@@ -77,7 +88,7 @@ def resolve_memory_root(base_dir: str | None = None) -> Path | None:
         text = pointer.read_text(encoding="utf-8").strip()
         if text:
             return Path(text).expanduser()
-    return None
+    return Path("memory_store")
 
 
 def empty_session(date_str: str) -> dict[str, Any]:
@@ -235,6 +246,27 @@ class MemoryRepository:
         target.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
         return merged
 
+    def save_profile(self, profile: dict[str, Any]) -> dict[str, Any]:
+        if self.root is None:
+            raise RuntimeError("记忆库未绑定。")
+        stored = dict(profile)
+        (self.root / "profile.json").write_text(
+            json.dumps(stored, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        settings = self.root / "settings"
+        settings.mkdir(parents=True, exist_ok=True)
+        config_path = settings / "config.json"
+        if config_path.is_file():
+            try:
+                previous = json.loads(config_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                previous = {}
+            if isinstance(previous, dict) and "targets" in previous and "targets" not in stored:
+                stored["targets"] = previous["targets"]
+        config_path.write_text(json.dumps(stored, ensure_ascii=False, indent=2), encoding="utf-8")
+        return stored
+
     def write_analysis(self, date_str: str, payload: dict[str, Any]) -> None:
         if self.analyses_dir is None:
             return
@@ -245,10 +277,25 @@ class MemoryRepository:
 
 def _match_column(header: str) -> str | None:
     cleaned = header.strip().lower()
+    best: str | None = None
+    best_length = -1
     for canonical, aliases in COLUMN_ALIASES.items():
         for alias in aliases:
-            if alias.lower() in cleaned:
-                return canonical
+            needle = alias.lower()
+            if needle in cleaned and len(needle) > best_length:
+                best = canonical
+                best_length = len(needle)
+    return best
+
+
+def _as_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "是", "完成", "有"}:
+        return True
+    if text in {"0", "false", "no", "n", "否", "没有", "无"}:
+        return False
     return None
 
 
@@ -323,14 +370,34 @@ def parse_health_table_bytes(
         if not mapped:
             continue
         date_str = _as_date(mapped.get("date"), default_date)
-        session = sessions.setdefault(date_str, {"date": date_str, "body_required": {}, "optional": {}})
+        session = sessions.setdefault(
+            date_str,
+            {"date": date_str, "body_required": {}, "psych_required": {}, "optional": {}},
+        )
         minutes = _as_float(mapped.get("resistance_minutes"))
         if minutes is not None:
             session["body_required"]["resistance_minutes"] = minutes
             session["body_required"]["resistance_done"] = minutes >= 20
+        elif "resistance_done" in mapped:
+            done = _as_bool(mapped.get("resistance_done"))
+            if done is not None:
+                session["body_required"]["resistance_done"] = done
         protein = _as_float(mapped.get("protein_g"))
         if protein is not None:
             session["body_required"]["protein_g"] = protein
+        if "progressive_overload" in mapped:
+            overload = _as_bool(mapped.get("progressive_overload"))
+            if overload is not None:
+                session["body_required"]["progressive_overload"] = overload
+        rating = _as_float(mapped.get("self_rating"))
+        if rating is not None and 1 <= rating <= 5:
+            session["psych_required"]["self_rating_1_to_5"] = rating
+        feedback = str(mapped.get("feedback_category") or "").strip()
+        if feedback in VALID_FEEDBACK:
+            session["psych_required"]["feedback_category"] = feedback
+        _store_scaled_optional(session, "anti_inflammatory_diet", "饮食质量", mapped.get("anti_inflammatory_diet"))
+        _store_scaled_optional(session, "stress_relief", "日常压力", mapped.get("stress_relief"))
+        _store_scaled_optional(session, "focus_state", "注意力", mapped.get("focus_state"))
         sleep_hours = _as_float(mapped.get("sleep_hours"))
         if sleep_hours is not None:
             session["optional"]["睡眠时长"] = {"hours": sleep_hours}
@@ -345,6 +412,19 @@ def parse_health_table_bytes(
             session["optional"]["基础机能"] = {"actual": ratio, "target": 1}
             session["optional"]["vital_signs"] = ratio
     return list(sessions.values())
+
+
+def _store_scaled_optional(session: dict[str, Any], english: str, chinese: str, value: Any) -> None:
+    number = _as_float(value)
+    if number is None:
+        return
+    if 1 < number <= 5:
+        session["optional"][chinese] = number
+        session["optional"][english] = round(number / 5.0, 3)
+        return
+    ratio = min(max(number, 0.0), 1.0)
+    session["optional"][english] = round(ratio, 3)
+    session["optional"][chinese] = {"actual": ratio, "target": 1}
 
 
 class LLMExtractor:
@@ -428,11 +508,16 @@ class LLMExtractor:
         protein = re.search(r"蛋白(?:质)?\s*[:：约]?\s*(\d+(?:\.\d+)?)\s*(?:g|克)?", text, re.I)
         if protein:
             body["protein_g"] = float(protein.group(1))
-        if re.search(r"练了?(腿|胸|背)|撸铁|抗阻|力量训练|深蹲|卧推|硬拉", text):
+        trained = re.search(r"练了?(腿|胸|背)|撸铁|抗阻|力量训练|深蹲|卧推|硬拉", text)
+        minutes = re.search(r"(?:力量训练|抗阻|练了)\s*(\d+(?:\.\d+)?)\s*分钟", text)
+        if minutes:
+            body["resistance_minutes"] = float(minutes.group(1))
+            body["resistance_done"] = body["resistance_minutes"] >= 20
+        elif trained:
             body["resistance_done"] = True
         elif any(word in text for word in ("没练", "休息日", "未训练")):
             body["resistance_done"] = False
-        if any(word in text for word in ("超负荷", "加重量", "破纪录", "PR", "多做了一组", "加重")):
+        if re.search(r"超负荷|加了?重量|破纪录|PR|多做了一组|加重", text):
             body["progressive_overload"] = True
         rating = re.search(r"(?:状态|心情|执行力|自评)\s*[:：打]?\s*([1-5](?:\.\d+)?)\s*分?", text)
         if rating:
@@ -441,6 +526,8 @@ class LLMExtractor:
             psych["feedback_category"] = "kept_and_changed"
         elif any(word in text for word in ("无视喷子", "左耳进右耳出", "不内耗", "屏蔽恶意", "discarded_insult")):
             psych["feedback_category"] = "discarded_insult"
+        elif any(word in text for word in ("内耗", "钻牛角尖", "invalid")):
+            psych["feedback_category"] = "invalid"
         sleep = re.search(r"睡了?\s*(\d+(?:\.\d+)?)\s*小时", text)
         if sleep:
             hours = float(sleep.group(1))
@@ -449,6 +536,12 @@ class LLMExtractor:
         if any(word in text for word in ("抗炎", "深海鱼", "蓝莓", "西兰花", "少油少糖", "沙拉")):
             optional["anti_inflammatory_diet"] = 1.0
             optional["饮食质量"] = 5
+        if any(word in text for word in ("压力缓解", "放松了", "不焦虑", "冥想")):
+            optional["stress_relief"] = 1.0
+            optional["日常压力"] = 5
+        if any(word in text for word in ("很专注", "专注力好", "注意力集中")):
+            optional["focus_state"] = 1.0
+            optional["注意力"] = 5
         return {
             "date": target_date,
             "raw_text": text,
@@ -618,15 +711,29 @@ class HealthAssistantHTTPHandler(BaseHTTPRequestHandler):
             return None
         return data
 
+    def _ready(self) -> MemoryRepository | None:
+        if self.repo is None or self.extractor is None or self.repo.root is None:
+            self._send_json({"error": "服务还没准备好。"}, 500)
+            return None
+        return self.repo
+
     def do_GET(self) -> None:
         path = self._path()
+        repo = self._ready()
+        if repo is None:
+            return
         if path == "/api/greeting":
-            self._send_json(build_vpet_greeting(self.repo))
+            self._send_json(build_vpet_greeting(repo))
             return
         if path == "/api/score":
-            result = score_library(self.repo)
+            result = score_library(repo)
             result["vpet_state"] = map_score_to_vpet_state(result)
             self._send_json(result)
+            return
+        if path == "/api/profile":
+            profile = repo.load_profile()
+            missing = score_checkin.missing_profile(profile)
+            self._send_json({"profile": profile, "missing_profile": missing, "complete": not missing})
             return
         self._send_json({"error": "Not Found"}, 404)
 
@@ -635,15 +742,61 @@ class HealthAssistantHTTPHandler(BaseHTTPRequestHandler):
         req_json = self._read_json()
         if req_json is None:
             return
+        repo = self._ready()
+        if repo is None:
+            return
         try:
             if path == "/api/checkin/text":
                 self._handle_text(req_json)
             elif path == "/api/checkin/file":
                 self._handle_file(req_json)
+            elif path == "/api/bind-library":
+                self._handle_bind(req_json)
+            elif path == "/api/profile":
+                self._handle_profile(req_json)
             else:
                 self._send_json({"error": "Unknown POST endpoint"}, 404)
         except RuntimeError as exc:
             self._send_json({"error": str(exc)}, 409)
+        except ValueError as exc:
+            self._send_json({"error": str(exc)}, 400)
+
+    def _handle_bind(self, req_json: dict[str, Any]) -> None:
+        raw_path = str(req_json.get("memory_path") or "").strip()
+        if not raw_path or "\x00" in raw_path:
+            raise ValueError("memory_path 不能为空。")
+        target = Path(raw_path).expanduser()
+        if not target.is_absolute():
+            target = Path.cwd() / target
+        target = target.resolve()
+        if target == Path(target.anchor):
+            raise ValueError("不能把记忆库绑到磁盘根目录。")
+        Path(".memory-path").write_text(str(target) + "\n", encoding="utf-8")
+        repo = MemoryRepository(str(target))
+        type(self).repo = repo
+        self.repo = repo
+        self._send_json({"memory_path": str(target), "bound": True})
+
+    def _handle_profile(self, req_json: dict[str, Any]) -> None:
+        repo = self.repo
+        if repo is None:
+            return
+        incoming = req_json.get("profile") if isinstance(req_json.get("profile"), dict) else req_json
+        if not isinstance(incoming, dict):
+            self._send_json({"error": "档案必须是 JSON 对象。"}, 400)
+            return
+        profile, missing, invalid = validate_profile_payload(incoming)
+        if profile is None:
+            self._send_json(
+                {"error": "档案缺字段或字段不合法，不能估算。", "missing_profile": missing, "invalid_fields": invalid},
+                400,
+            )
+            return
+        saved = repo.save_profile(profile)
+        evaluation = score_library(repo)
+        evaluation["vpet_state"] = map_score_to_vpet_state(evaluation)
+        evaluation["profile"] = saved
+        self._send_json(evaluation)
 
     def _handle_text(self, req_json: dict[str, Any]) -> None:
         extracted = self.extractor.extract_from_text_or_image(
@@ -711,6 +864,29 @@ class HealthAssistantHTTPHandler(BaseHTTPRequestHandler):
         )
 
 
+def validate_profile_payload(raw: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str], list[str]]:
+    profile = dict(raw)
+    missing = [key for key in score_checkin.REQUIRED_PROFILE if key not in profile or profile[key] is None or profile[key] == ""]
+    invalid: list[str] = []
+    if "sex" not in missing:
+        sex = str(profile.get("sex", "")).strip().lower()
+        if sex not in VALID_SEX:
+            invalid.append("sex")
+        else:
+            profile["sex"] = sex
+    for key in ("height_cm", "weight_kg", "age", "training_years"):
+        if key in missing:
+            continue
+        value = profile.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            invalid.append(key)
+    if "injury" not in missing and not isinstance(profile.get("injury"), bool):
+        invalid.append("injury")
+    if missing or invalid:
+        return None, missing, invalid
+    return profile, [], []
+
+
 def _public_session(extracted: dict[str, Any]) -> dict[str, Any]:
     return {
         "date": extracted.get("date"),
@@ -731,14 +907,25 @@ def make_server(host: str, port: int, repo: MemoryRepository | None = None) -> T
     return ThreadingHTTPServer((host, port), handler)
 
 
-def run_server(host: str = "127.0.0.1", port: int = 8765) -> None:
-    server = make_server(host, port)
-    print(f"[Health-Assessment API] http://{host}:{port}")
+def api_port() -> int:
+    raw = os.environ.get("HEALTH_API_PORT", "").strip()
+    if not raw:
+        return DEFAULT_PORT
+    try:
+        port = int(raw)
+    except ValueError:
+        return DEFAULT_PORT
+    if 0 < port < 65536:
+        return port
+    return DEFAULT_PORT
+
+
+def run_server(host: str = DEFAULT_HOST, port: int | None = None) -> None:
+    chosen = DEFAULT_PORT if port is None else port
+    server = make_server(host, chosen)
+    print(f"[Health-Assessment API] http://{host}:{chosen}")
     server.serve_forever()
 
 
 if __name__ == "__main__":
-    run_server(
-        host=os.environ.get("HEALTH_API_HOST", "127.0.0.1"),
-        port=int(os.environ.get("HEALTH_API_PORT", "8765")),
-    )
+    run_server(host=os.environ.get("HEALTH_API_HOST", DEFAULT_HOST), port=api_port())

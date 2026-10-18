@@ -1,280 +1,152 @@
-<div id="top">
+# Health Assessment（薄肌与黄毛个人健康评估）
 
-<!-- HEADER STYLE: COMPACT -->
-# HEALTH-ASSESSMENT
-<em>Seven days. Real scores. No diagnosis.</em>
+**Seven days. Deterministic scores. No medical diagnosis.**
 
-<!-- BADGES -->
-<!-- local repository, no metadata badges. -->
+`health-assessment` 把日常自述、饮食或训练图片，以及手表、手机导出的 CSV / Excel，收成同一个人的打卡记录。身体「薄肌」和心理抗压「黄毛」各 100 分。满 7 个不同日期后，由本地脚本合成 200 分。不满 7 天只给出当天还缺什么。
 
-<em>Built with the tools and technologies:</em>
+它同时是一份 OpenClaw Skill，并带有 [LorisYounger/VPet](https://github.com/LorisYounger/VPet) 桌宠插件工程。
 
-<img src="https://img.shields.io/badge/JSON-000000.svg?style=default&logo=JSON&logoColor=white" alt="JSON">
-<img src="https://img.shields.io/badge/Python-3776AB.svg?style=default&logo=Python&logoColor=white" alt="Python">
+## 核心特性
 
-<br clear="left"/>
+- **只认脚本算的分。** `scripts/score_checkin.py` 是唯一算分入口。模型不要心算，也不要补没写的数字。
+- **两条主线分开记。** 身体必填是蛋白质、抗阻、渐进超负荷，三项平分 80 分。心理必填是 1–5 自评和评价分类，两项各 40 分。每一侧再加 20 分选填。
+- **选填只在写过的项目之间平分 20 分。** 没写的项目不计 0。一项都没写则是无法评分，该侧 100 分不合成。
+- **抗阻按自然日跨度算期望次数。** 有窗口就用窗口起止日；没有窗口就用最早和最晚打卡日。不满 7 个不同日期仍然不出总分。
+- **同日多源合并。** 训练时长和蛋白质优先保留穿戴记录。超负荷和心理自评优先保留本人自述。
+- **本地服务只听回环地址。** 默认 `http://127.0.0.1:8765`，可用 `HEALTH_API_PORT` 修改。
+- **红旗立即停分。** 胸痛、昏厥、晕厥、自伤、轻生、自行停药、急性剧痛、呼吸困难、异常心悸、骨裂、关节急性肿胀。写在标签里，或出现在原文里，都停。紧挨着「没有」「无」「否认」「未出现」「未诉」的不算。停分后只提示联系医疗或当地紧急帮助，不开药，不给训练计划。
 
-## Table of Contents
+## 运行模式
 
-- [Table of Contents](#table-of-contents)
-- [Overview](#overview)
-- [Features](#features)
-- [Project Structure](#project-structure)
-    - [Project Index](#project-index)
-- [Getting Started](#getting-started)
-    - [Prerequisites](#prerequisites)
-    - [Installation](#installation)
-    - [Usage](#usage)
-    - [Testing](#testing)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
-- [License](#license)
-- [Acknowledgments](#acknowledgments)
+| `mode` | 条件 | 结果 |
+| :--- | :--- | :--- |
+| `blocked_profile` | 缺身高、体重、年龄、性别、训练年限或是否有伤病 | 不打分，返回缺的字段 |
+| `redflag` | 标签或原文命中红旗词 | 不打分。桌宠状态为 `Ill` |
+| `under7` | 档案完整、无红旗，不同日期少于 7 天 | 不出 200 分。返回 `daily_progress` |
+| `scored` | 档案完整、无红旗，不同日期不少于 7 天 | 给出 200 分明细。桌宠按分数使用 `Happy` 或 `Nomal` |
 
----
+`Nomal` 是 VPet 状态枚举里的拼写。
 
-## Overview
+身体或心理的必填缺任何一块，那一侧不合成，总分也不合成。有伤病只记在档案里，本身不停分。
 
+## 目录
 
-
----
-
-## Features
-
-|      | Component       | Details                              |
-| :--- | :-------------- | :----------------------------------- |
-| ⚙️  | **Architecture**  | <ul><li>单技能（skill）结构，围绕 <code>scripts/score_checkin.py</code> 单一评分入口</li><li>数据流：用户打卡记录 → 本地个人库 → 评分脚本 → 总分（≥7 个不同日期才输出）</li><li>概念层：**薄肌**（蛋白质 / 抗阻 / 超负荷）+ **黄毛**（执行自评分）</li><li>评分仍由本地脚本完成；可选 API 只监听 127.0.0.1，用来解析表格和给桌宠提供状态</li></ul> |
-| 🔩 | **Code Quality**  | <ul><li>评分逻辑**唯一来源**：<code>scripts/score_checkin.py</code>，禁止外部手算</li><li>职责单一：脚本只算分，不做诊断、不开药</li><li>输入校验：日期去重计数，< 7 个不同日期不出总分</li></ul> |
-| 📄 | **Documentation** | <ul><li>README 明确边界：**不写**财富、加密、买房、婚姻</li><li>记录归属：每人自己的库，互不混用</li><li>评价处理规则：可测量的评价 → 留下并改行为；人身攻击 → 丢掉</li></ul> |
-| 🔌 | **Integrations**  | <ul><li>依赖 <code>full-7.json</code> 作为数据/配置载体</li><li>Python 运行时（<code>python</code> / <code>py</code>）</li><li>JSON 读写作为唯一持久化通道</li></ul> |
-| 🧩 | **Modularity**    | <ul><li>评分与记录分离：记录在个人库，计算在脚本</li><li>概念模块化：身体（薄肌）与心理（黄毛）两条独立线</li><li>无跨模块耦合，便于单独替换评分规则</li></ul> |
-| 🧪 | **Testing**       | <ul><li>以 <code>full-7.json</code> 作为边界用例（7 个不同日期阈值）</li><li>关键断言：< 7 日期 → 无总分</li><li>无独立测试框架，依赖脚本自校验</li></ul> |
-| ⚡️  | **Performance**   | <ul><li>纯本地计算，无网络往返</li><li>单文件 JSON 读写，O(n) 日期去重</li><li>轻量：无重型依赖</li></ul> |
-| 🛡️ | **Security**      | <ul><li>数据本地化：记录存于**每个人自己的库**</li><li>无诊断 / 无开药，规避医疗合规风险</li><li>无外部上传，隐私面最小</li></ul> |
-
----
-
-## Project Structure
-
-```sh
-└── health-assessment/
-    ├── evals
-    │   ├── accept.md
-    │   └── fixtures
-    ├── LICENSE
-    ├── prompts
-    │   ├── bomi-required.md
-    │   ├── custom-standard.md
-    │   ├── huangmao-classification.md
-    │   └── optional-items.md
-    ├── README.md
-    ├── scripts
-    │   ├── score_checkin.py
-    │   ├── test_score.py
-    │   └── validate_skill.py
-    ├── SKILL.md
-    ├── standards
-    │   ├── domains.md
-    │   ├── literature.md
-    │   ├── safety.md
-    │   └── scoring.md
-    └── workflows
-        ├── 00-bind-library.md
-        ├── 01-create-profile.md
-        ├── 02-checkin.md
-        ├── 03-analyze-file.md
-        ├── 04-score.md
-        ├── 05-read-memory.md
-        └── 06-red-flag.md
+```text
+health-assessment/
+├── LICENSE
+├── README.md
+├── SKILL.md
+├── evals/
+│   ├── accept.md
+│   └── fixtures/
+├── prompts/
+│   ├── bomi-required.md
+│   ├── custom-standard.md
+│   ├── huangmao-classification.md
+│   └── optional-items.md
+├── scripts/
+│   ├── score_checkin.py
+│   ├── health_api_server.py
+│   ├── test_score.py
+│   ├── test_health_api.py
+│   └── validate_skill.py
+├── standards/
+│   ├── domains.md
+│   ├── item-sources.md
+│   ├── literature.md
+│   ├── safety.md
+│   └── scoring.md
+├── vpet_bridge/
+│   ├── VPetHealthPlugin.cs
+│   ├── VPet.Plugin.HealthAssessment.csproj
+│   └── info.lps
+└── workflows/
+    ├── 00-bind-library.md
+    ├── 01-create-profile.md
+    ├── 02-checkin.md
+    ├── 03-analyze-file.md
+    ├── 04-score.md
+    ├── 05-read-memory.md
+    └── 06-red-flag.md
 ```
 
-### Project Index
+## 环境
 
-<details open>
-	<summary><b><code>C:\USERS\33446\DESKTOP\SHZ自用SKILL\HEALTH-ASSESSMENT/</code></b></summary>
-	<!-- __root__ Submodule -->
-	<details>
-		<summary><b>__root__</b></summary>
-		<blockquote>
-			<div class='directory-path' style='padding: 8px 0; color: #666;'>
-				<code><b>⦿ __root__</b></code>
-			<table style='width: 100%; border-collapse: collapse;'>
-			<thead>
-				<tr style='background-color: #f8f9fa;'>
-					<th style='width: 30%; text-align: left; padding: 8px;'>File Name</th>
-					<th style='text-align: left; padding: 8px;'>Summary</th>
-				</tr>
-			</thead>
-				<tr style='border-bottom: 1px solid #eee;'>
-					<td style='padding: 8px;'><b><a href='https://github.com/songhangze985-eng/health-assessment/blob/rebuild/personal-health/LICENSE'>LICENSE</a></b></td>
-					<td style='padding: 8px;'>- Grants legal permission for anyone to use, modify, and distribute the health-assessment project freely, requiring only that the copyright notice and license text remain included<br>- As the repositorys foundational legal layer, it enables open collaboration across all scoring, check-in, and personal development components without restricting commercial or private use.</td>
-				</tr>
-			</table>
-		</blockquote>
-	</details>
-	<!-- evals Submodule -->
-	<details>
-		<summary><b>evals</b></summary>
-		<blockquote>
-			<div class='directory-path' style='padding: 8px 0; color: #666;'>
-				<code><b>⦿ evals</b></code>
-			<!-- fixtures Submodule -->
-			<details>
-				<summary><b>fixtures</b></summary>
-				<blockquote>
-					<div class='directory-path' style='padding: 8px 0; color: #666;'>
-						<code><b>⦿ evals.fixtures</b></code>
-					<table style='width: 100%; border-collapse: collapse;'>
-					<thead>
-						<tr style='background-color: #f8f9fa;'>
-							<th style='width: 30%; text-align: left; padding: 8px;'>File Name</th>
-							<th style='text-align: left; padding: 8px;'>Summary</th>
-						</tr>
-					</thead>
-						<tr style='border-bottom: 1px solid #eee;'>
-							<td style='padding: 8px;'><b><a href='https://github.com/songhangze985-eng/health-assessment/blob/rebuild/personal-health/evals/fixtures/full-7.json'>full-7.json</a></b></td>
-							<td style='padding: 8px;'>- Provides a complete seven-day check-in fixture for validating the personal development and health assessment skill, covering protein intake, resistance training with overload, execution self-rating, and classification of feedback<br>- It supplies the minimum distinct dates required before any total score appears, ensuring scoring logic is exercised only through the dedicated script and never through diagnosis or unrelated life domains.</td>
-						</tr>
-					</table>
-				</blockquote>
-			</details>
-		</blockquote>
-	</details>
-	<!-- scripts Submodule -->
-	<details>
-		<summary><b>scripts</b></summary>
-		<blockquote>
-			<div class='directory-path' style='padding: 8px 0; color: #666;'>
-				<code><b>⦿ scripts</b></code>
-			<table style='width: 100%; border-collapse: collapse;'>
-			<thead>
-				<tr style='background-color: #f8f9fa;'>
-					<th style='width: 30%; text-align: left; padding: 8px;'>File Name</th>
-					<th style='text-align: left; padding: 8px;'>Summary</th>
-				</tr>
-			</thead>
-				<tr style='border-bottom: 1px solid #eee;'>
-					<td style='padding: 8px;'><b><a href='https://github.com/songhangze985-eng/health-assessment/blob/rebuild/personal-health/scripts/score_checkin.py'>score_checkin.py</a></b></td>
-					<td style='padding: 8px;'>Scripts/score_checkin.py` — 摘要## 目的这是「个人发展与健康评估」技能中<strong>唯一的评分权威</strong>。它把用户每日打卡记录转换为确定性的分数与反馈分类，确保模型不会自行重算或臆造分数——模型只能运行此脚本并如实报告其 JSON 输出。## 在整体架构中的角色-<strong>输入层</strong>：读取用户个人档案（身高、体重、年龄、性别、训练年限、伤病）与按日期记录的打卡数据。-<strong>规则层</strong>：依据邵艾伦与孙宇晨长谈中关于身体与心理抗压的原则进行判定：-<strong>身体维度（薄肌）</strong>：围绕蛋白质摄入、抗阻训练、超负荷原则评估。-<strong>心理维度（黄毛）</strong>：执行自评分机制——可测量的评价保留并用于改进行为，人身攻击类内容丢弃。-<strong>输出层</strong>：产出结构化 JSON，包含分数、分类标签与反馈建议。## 关键行为约束-<strong>数据门槛</strong>：记录分散在每个人自己的库中；不满 <strong>7 个不同日期</strong> 不出总分，避免样本不足导致的误导性结论。-<strong>安全边界</strong>：脚本识别红旗信号（如胸痛、晕厥、自伤、自行停药、急性剧痛等），触发时不做常规评分。-<strong>非医疗定位</strong>：不诊断、不开药；不涉及财富、加密、买房、婚姻等话题。-<strong>确定性</strong>：同一输入必得同一输出，杜绝模型自由发挥。## 达成效果该文件将主观的「身心抗压」对话原则固化为可复现的评分流程，使技能在跨用户、跨会话场景下保持一致、可审计、可信任。</td>
-				</tr>
-				<tr style='border-bottom: 1px solid #eee;'>
-					<td style='padding: 8px;'><b><a href='https://github.com/songhangze985-eng/health-assessment/blob/rebuild/personal-health/scripts/test_score.py'>test_score.py</a></b></td>
-					<td style='padding: 8px;'>Score_checkin.py 的评分行为是否符合个人发展与健康评估技能规则。通过模拟不同训练与心理记录场景，确认满七天窗口才出总分、缺失必填项不归零、红旗信号停止评分、自定义蛋白目标生效、无效分类降低心理分等边界条件，并生成固定测试数据，保障评分逻辑稳定可靠。</td>
-				</tr>
-				<tr style='border-bottom: 1px solid #eee;'>
-					<td style='padding: 8px;'><b><a href='https://github.com/songhangze985-eng/health-assessment/blob/rebuild/personal-health/scripts/validate_skill.py'>validate_skill.py</a></b></td>
-					<td style='padding: 8px;'>Guards the health-assessment skills integrity by confirming every required standard, workflow, prompt, and evaluation asset exists, verifying the skill name and conclusion labels, rejecting forbidden wealth, crypto, housing, and marriage terms, and enforcing a concise SKILL.md, ensuring the codebase stays aligned with its personal development and resilience focus.</td>
-				</tr>
-			</table>
-		</blockquote>
-	</details>
-</details>
+- Python 3.10 或更高版本。计分和 CSV 解析只用标准库。
+- 读取 `.xlsx` 时需要 `openpyxl`：`pip install openpyxl`。没有它时请先导出 CSV。
+- VPet 插件在 Windows 上编译，目标框架是 `net8.0-windows`，NuGet 包为 `VPet-Simulator.Core` 与 `VPet-Simulator.Windows.Interface` 1.1。
 
----
+## 记忆库与档案
 
-## Getting Started
+服务按这个顺序找库：调用时传入的目录、`HEALTH_MEMORY_PATH`、仓库根目录的 `.memory-path`。三者都没有时，使用 `./memory_store`，并创建 `sessions/` 与 `analyses/`。`.memory-path` 和 `memory_store/` 不提交。
 
-### Prerequisites
+对话流程里仍然先问这个人的库在哪，不要把下一个人的记录写进上一个库。
 
-This project requires the following dependencies:
-
-- **Programming Language:** Python
-
-### Installation
-
-Build health-assessment from the source and intsall dependencies:
-
-1. **Clone the repository:**
-
-    ```sh
-    git clone https://github.com/songhangze985-eng/health-assessment.git
-    cd health-assessment
-    git checkout rebuild/personal-health
-    ```
-
-这个仓库没有第三方安装依赖。调用技能时阅读 `SKILL.md`。计分只运行：
-
-```sh
-py -3 scripts/score_checkin.py payload.json
+```bash
+mkdir -p ./my_health_memory
+printf '%s\n' "./my_health_memory" > .memory-path
 ```
 
-### Testing
+也可以等服务起来后提交：
 
-```sh
-py -3 scripts/test_score.py
-py -3 scripts/validate_skill.py
+```bash
+curl -s -X POST http://127.0.0.1:8765/api/bind-library \
+  -H 'Content-Type: application/json' \
+  -d '{"memory_path":"./my_health_memory"}'
 ```
 
----
+档案六个字段缺一不可：`height_cm`、`weight_kg`、`age`、`sex`（`female`、`male` 或 `other`）、`training_years`、`injury`（布尔值）。缺了就拒绝保存，不估算。
 
-## Roadmap
+```bash
+curl -s -X POST http://127.0.0.1:8765/api/profile \
+  -H 'Content-Type: application/json' \
+  -d '{"height_cm":172,"weight_kg":75,"age":36,"sex":"male","training_years":0,"injury":false}'
+```
 
-- [X] **`Task 1`**: <strike>Implement feature one.</strike>
-- [ ] **`Task 2`**: Implement feature two.
-- [ ] **`Task 3`**: Implement feature three.
+`GET /api/profile` 读取当前档案。保存成功后的响应就是当前 `evaluate_payload`，并带上 `vpet_state`。
 
----
+## 命令行计分
 
-## Contributing
+```bash
+python scripts/score_checkin.py evals/fixtures/full-7.json
+```
 
-- **Issues**: https://github.com/songhangze985-eng/health-assessment/issues
-- **Pull requests**: https://github.com/songhangze985-eng/health-assessment/pulls
+也可以把 JSON 从标准输入送进去。回复时使用脚本印出的 `mode`、`scores`、`conclusion`、`next_steps`，不要另算一遍。
 
-<details closed>
-<summary>Contributing Guidelines</summary>
+## 本地服务
 
-1. **Fork the Repository**: Start by forking https://github.com/songhangze985-eng/health-assessment
-2. **Clone Locally**:
-   ```sh
-   git clone https://github.com/songhangze985-eng/health-assessment.git
-   ```
-3. **Create a New Branch**: Always work on a new branch, giving it a descriptive name.
-   ```sh
-   git checkout -b new-feature-x
-   ```
-4. **Make Your Changes**: Develop and test your changes locally.
-5. **Commit Your Changes**: Commit with a clear message describing your updates.
-   ```sh
-   git commit -m 'Implemented new feature x.'
-   ```
-6. **Push**: Push the changes to your forked repository.
-   ```sh
-   git push origin new-feature-x
-   ```
-7. **Submit a Pull Request**: Create a PR against the original project repository. Clearly describe the changes and their motivations.
-8. **Review**: Once your PR is reviewed and approved, it will be merged into the main branch. Congratulations on your contribution!
-</details>
+```bash
+python scripts/health_api_server.py
+```
 
-<details closed>
-<summary>Contributor Graph</summary>
-<br>
-<p align="left">
-   <a href="https://github.com/songhangze985-eng/health-assessment/graphs/contributors">
-      <img src="https://contrib.rocks/image?repo=songhangze985-eng/health-assessment">
-   </a>
-</p>
-</details>
+没设置 `LLM_API_KEY` 时，文字打卡用本地规则。图片不会被识别，只保留说明文字。设置了 Key 后，`LLM_API_URL` 与 `LLM_MODEL` 可用 OpenAI 兼容接口。
 
----
+| 方法 | 路径 | 作用 |
+| :--- | :--- | :--- |
+| `POST` | `/api/bind-library` | 写入 `.memory-path` 并切换当前库 |
+| `GET` | `/api/profile` | 读取档案和缺字段 |
+| `POST` | `/api/profile` | 校验并保存档案，返回最新评估 |
+| `GET` | `/api/greeting` | 今日缺项和桌宠气泡 |
+| `POST` | `/api/checkin/text` | 自然语言打卡 |
+| `POST` | `/api/checkin/file` | Base64 的 CSV、Excel 或图片 |
+| `GET` | `/api/score` | 当前窗口的评估和 `vpet_state` |
 
-## License
+## 桌宠插件
 
-Health-assessment is protected under the [LICENSE](https://choosealicense.com/licenses) License. For more details, refer to the [LICENSE](https://choosealicense.com/licenses/) file.
+`vpet_bridge/` 是插件源码，不是已经编译好的模组。在 Windows 上用该目录的 csproj 生成 DLL 后，与 `info.lps` 一起放进 VPet 模组目录。`PluginName` 是 `HealthAssessment`，必须和 `info.lps` 里的模组名一致。
 
----
+插件启动时先访问 `/api/greeting`。连不上就从 `HEALTH_ASSESSMENT_ROOT`，或插件目录往上找到的 `scripts/health_api_server.py`，后台拉起 `python`。这个子进程只在插件自己启动它时，于 `EndGame()` 里结束。
 
-## Acknowledgments
+右键「互动」菜单有三项：今日文字打卡、查看 7 天评估报告、导入手表或手机健康文件。CSV、Excel 和图片也可以直接拖到桌宠上。
 
-- Credit `contributors`, `inspiration`, `references`, etc.
+## 测试
 
-<div align="right">
+```bash
+python scripts/test_score.py
+python scripts/test_health_api.py
+python scripts/validate_skill.py
+```
 
-[![][back-to-top]](#top)
+## 协议与边界
 
-</div>
-
-
-[back-to-top]: https://img.shields.io/badge/-BACK_TO_TOP-151515?style=flat-square
-
-
----
+项目使用 MIT License。分数只用于个人记录习惯。它不诊断、不开药、不解读化验或影像，也不提供财务、加密或婚恋建议。出现红旗或身体不适时，停止加练并联系医疗或当地紧急帮助。
