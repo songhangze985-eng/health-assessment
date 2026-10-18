@@ -1,0 +1,5 @@
+.memory-path
+memory_store/
+__pycache__/
+*.pyc
+.DS_Store
