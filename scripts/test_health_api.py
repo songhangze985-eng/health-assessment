@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import base64
 import datetime
+import http.client
 import json
 import os
+import sys
 import tempfile
 import threading
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -384,6 +387,11 @@ def test_dashboard_settings_switch_memory_without_touching_login_items() -> None
         assert "薄肌与黄毛" in html
         assert "data.scores && data.scores[key]" in html
         assert "total_score" not in html
+        assert "llm_api_key_set" in html
+        assert "llm_api_key_last4" in html
+        assert "clear_api_key" in html
+        assert "settings.llm_api_key = typedKey" in html
+        assert ".value = cfgRes.llm_api_key" not in html
 
         status, settings = request_json(base, "GET", "/api/settings")
         assert status == 200
@@ -408,12 +416,22 @@ def test_dashboard_settings_switch_memory_without_touching_login_items() -> None
         assert stored["llm_api_key"] == "test-key"
         assert stored["profile"]["height_cm"] == 172
         assert os.environ["HEALTH_MEMORY_PATH"] == str(library.resolve())
+        assert "llm_api_key" not in saved["settings"]
+        assert saved["settings"]["llm_api_key_set"] is True
+        assert saved["settings"]["llm_api_key_last4"] == "-key"
+        status, visible = request_json(base, "GET", "/api/settings")
+        assert status == 200, visible
+        assert "llm_api_key" not in visible
+        assert visible["llm_api_key_last4"] == "-key"
         plist_path = home / "Library" / "LaunchAgents" / "com.songhangze.healthassessment.plist"
-        plist = plistlib.loads(plist_path.read_bytes())
-        assert plist["Label"] == "com.songhangze.healthassessment"
-        assert plist["RunAtLoad"] is True
-        assert plist["KeepAlive"] is False
-        assert any(str(item).endswith("mac_menubar_pet.py") for item in plist["ProgramArguments"])
+        if sys.platform == "darwin":
+            plist = plistlib.loads(plist_path.read_bytes())
+            assert plist["Label"] == "com.songhangze.healthassessment"
+            assert plist["RunAtLoad"] is True
+            assert plist["KeepAlive"] is False
+            assert any(str(item).endswith("mac_menubar_pet.py") for item in plist["ProgramArguments"])
+        else:
+            assert not plist_path.exists()
         assert real_plist.exists() is existed
 
         status, saved_profile = request_json(base, "POST", "/api/profile", profile_body())
@@ -439,6 +457,343 @@ def test_dashboard_settings_switch_memory_without_touching_login_items() -> None
         _remove_tree(home)
 
 
+def raw_request(
+    base: str,
+    method: str,
+    path: str,
+    body: bytes | None = None,
+    headers: dict | None = None,
+) -> tuple[int, dict]:
+    request = urllib.request.Request(base + path, data=body, method=method)
+    for key, value in (headers or {}).items():
+        request.add_header(key, value)
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            raw = response.read().decode("utf-8")
+            code = response.status
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8")
+        code = exc.code
+    try:
+        parsed = json.loads(raw) if raw else {}
+    except json.JSONDecodeError:
+        parsed = {"raw": raw}
+    return code, parsed
+
+
+def test_loopback_request_parsers() -> None:
+    assert health_api_server.host_header_is_loopback("127.0.0.1:8765", 8765)
+    assert health_api_server.host_header_is_loopback("localhost:8765", 8765)
+    assert health_api_server.host_header_is_loopback("[::1]:8765", 8765)
+    assert health_api_server.host_header_is_loopback("127.0.0.1", 80)
+    assert not health_api_server.host_header_is_loopback("127.0.0.1", 8765)
+    assert not health_api_server.host_header_is_loopback("evil.example:8765", 8765)
+    assert not health_api_server.host_header_is_loopback("127.0.0.1.evil.example", 8765)
+    assert not health_api_server.host_header_is_loopback("127.0.0.1:9", 8765)
+    assert not health_api_server.host_header_is_loopback(None, 8765)
+    assert health_api_server.origin_matches_loopback_port(None, 8765)
+    assert health_api_server.origin_matches_loopback_port("http://127.0.0.1:8765", 8765)
+    assert health_api_server.origin_matches_loopback_port("http://localhost:8765", 8765)
+    assert not health_api_server.origin_matches_loopback_port("http://127.0.0.1:80", 8765)
+    assert not health_api_server.origin_matches_loopback_port("https://127.0.0.1:8765", 8765)
+    assert not health_api_server.origin_matches_loopback_port("http://evil.example", 8765)
+    assert not health_api_server.origin_matches_loopback_port("null", 8765)
+    assert health_api_server.content_type_is_json("application/json; charset=utf-8")
+    assert not health_api_server.content_type_is_json("text/plain")
+    assert not health_api_server.content_type_is_json(None)
+
+
+def test_cross_site_writes_are_rejected() -> None:
+    home = Path(tempfile.mkdtemp(prefix="health-api-csrf-"))
+    work = Path(tempfile.mkdtemp(prefix="health-api-csrf-work-"))
+    origin_cwd = Path.cwd()
+    saved_env = {
+        key: os.environ.get(key)
+        for key in ("HOME", "HEALTH_MEMORY_PATH", "LLM_API_KEY", "LLM_API_URL", "LLM_MODEL", "HEALTH_SKIP_LAUNCH_AGENT")
+    }
+    server = None
+    try:
+        os.environ["HOME"] = str(home)
+        os.environ["HEALTH_SKIP_LAUNCH_AGENT"] = "1"
+        os.environ.pop("HEALTH_MEMORY_PATH", None)
+        os.chdir(work)
+        memory = work / "mem"
+        repo = health_api_server.MemoryRepository(str(memory))
+        server = health_api_server.make_server("127.0.0.1", 0, repo)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        port = server.server_address[1]
+        base = f"http://127.0.0.1:{port}"
+        config_path = home / "Library" / "Application Support" / "HealthAssessment" / "config.json"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(
+            json.dumps(
+                {
+                    "memory_path": str(memory),
+                    "llm_api_key": "super-secret-key-1234",
+                    "llm_api_url": "https://example.test/v1",
+                    "llm_model": "gemini-2.5-flash",
+                    "auto_start_on_login": False,
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        status, settings = request_json(base, "GET", "/api/settings")
+        assert status == 200, settings
+        assert "llm_api_key" not in settings
+        assert settings["llm_api_key_set"] is True
+        assert settings["llm_api_key_last4"] == "1234"
+        assert settings["llm_api_url"] == "https://example.test/v1"
+
+        attack = json.dumps({"llm_api_url": "https://attacker.example/steal"}).encode("utf-8")
+        status, denied = raw_request(
+            base,
+            "POST",
+            "/api/settings",
+            attack,
+            {"Content-Type": "text/plain"},
+        )
+        assert status == 415, denied
+        status, denied = raw_request(
+            base,
+            "POST",
+            "/api/bind-library",
+            json.dumps({"memory_path": str(work / "elsewhere")}).encode("utf-8"),
+            {"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        assert status == 415, denied
+        assert not (work / ".memory-path").exists()
+        status, denied = raw_request(
+            base,
+            "POST",
+            "/api/checkin/text",
+            json.dumps({"text": "蛋白质 1 克", "date": "2026-10-18"}).encode("utf-8"),
+            {"Content-Type": "text/plain", "Origin": "https://evil.example"},
+        )
+        assert status == 403, denied
+        status, denied = raw_request(
+            base,
+            "POST",
+            "/api/profile",
+            json.dumps(profile_body()).encode("utf-8"),
+            {
+                "Content-Type": "application/json",
+                "Origin": "http://evil.example",
+                "Sec-Fetch-Site": "cross-site",
+            },
+        )
+        assert status == 403, denied
+        status, denied = raw_request(
+            base,
+            "GET",
+            "/api/settings",
+            headers={"Host": "evil.example"},
+        )
+        assert status == 403, denied
+        status, denied = raw_request(
+            base,
+            "POST",
+            "/api/settings",
+            attack,
+            {"Content-Type": "application/json", "Host": "evil.example:8765"},
+        )
+        assert status == 403, denied
+        status, denied = raw_request(
+            base,
+            "POST",
+            "/api/settings",
+            attack,
+            {"Content-Type": "application/json", "Origin": "null"},
+        )
+        assert status == 403, denied
+        stored = json.loads(config_path.read_text(encoding="utf-8"))
+        assert stored["llm_api_url"] == "https://example.test/v1"
+        assert stored["llm_api_key"] == "super-secret-key-1234"
+        assert not (memory / "sessions").joinpath("2026-10-18.json").exists()
+
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        conn.request(
+            "POST",
+            "/api/settings",
+            body=attack,
+            headers={"Content-Type": "text/plain"},
+        )
+        first = conn.getresponse()
+        first.read()
+        assert first.status == 415
+        conn.request("GET", "/api/greeting")
+        second = conn.getresponse()
+        greeting = json.loads(second.read().decode("utf-8"))
+        assert second.status == 200
+        assert "vpet_bubble_text" in greeting
+        conn.close()
+
+        status, saved = request_json(
+            base,
+            "POST",
+            "/api/settings",
+            {"llm_api_url": "https://example.test/v1", "memory_path": str(memory)},
+        )
+        assert status == 200, saved
+        assert "llm_api_key" not in saved["settings"]
+        assert saved["settings"]["llm_api_key_set"] is True
+        assert json.loads(config_path.read_text(encoding="utf-8"))["llm_api_key"] == "super-secret-key-1234"
+
+        status, replaced = raw_request(
+            base,
+            "POST",
+            "/api/settings",
+            json.dumps({"llm_api_key": "next-secret-9999"}).encode("utf-8"),
+            {
+                "Content-Type": "application/json; charset=utf-8",
+                "Origin": f"http://127.0.0.1:{port}",
+                "Sec-Fetch-Site": "same-origin",
+            },
+        )
+        assert status == 200, replaced
+        assert replaced["settings"]["llm_api_key_last4"] == "9999"
+        assert "next-secret-9999" not in json.dumps(replaced)
+        assert json.loads(config_path.read_text(encoding="utf-8"))["llm_api_key"] == "next-secret-9999"
+
+        status, kept = request_json(base, "POST", "/api/settings", {"llm_model": "gemini-2.5-flash"})
+        assert status == 200, kept
+        assert json.loads(config_path.read_text(encoding="utf-8"))["llm_api_key"] == "next-secret-9999"
+
+        status, cleared = request_json(base, "POST", "/api/settings", {"llm_api_key": ""})
+        assert status == 200, cleared
+        assert cleared["settings"]["llm_api_key_set"] is False
+        assert json.loads(config_path.read_text(encoding="utf-8"))["llm_api_key"] == ""
+
+        status, short = request_json(base, "POST", "/api/settings", {"llm_api_key": "ab"})
+        assert status == 200, short
+        assert short["settings"]["llm_api_key_set"] is True
+        assert short["settings"]["llm_api_key_last4"] == ""
+        assert short["settings"].get("llm_api_key") in {None, ""}
+    finally:
+        if server is not None:
+            server.shutdown()
+            server.server_close()
+        os.chdir(origin_cwd)
+        for key, value in saved_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        _remove_tree(work)
+        _remove_tree(home)
+
+
+def test_session_dates_stay_inside_sessions_dir() -> None:
+    root = Path(tempfile.mkdtemp(prefix="health-api-day-"))
+    nested = root / "memory"
+    server = None
+    try:
+        repo = health_api_server.MemoryRepository(str(nested))
+        for bad in ("../../evil", r"..\..\evil", "2026-10-18/../../tmp/x", "2026-02-31", "2026-1-8", "....//evil"):
+            try:
+                repo.merge_and_save_session({"date": bad, "raw_text": "nope"}, source_type="self_report")
+            except ValueError as exc:
+                assert "YYYY-MM-DD" in str(exc)
+            else:
+                raise AssertionError(f"accepted date {bad}")
+        try:
+            repo.write_analysis("../../evil", {"ok": False})
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("analysis date escaped validation")
+        assert not (root / "evil.json").exists()
+        assert list(nested.rglob("evil.json")) == []
+        assert list(root.rglob("*.tmp")) == []
+
+        saved = repo.merge_and_save_session(
+            {"date": "2024-02-29", "raw_text": "闰日", "optional": {"sleep_quality": 1}},
+            source_type="self_report",
+        )
+        assert saved["date"] == "2024-02-29"
+        assert (nested / "sessions" / "2024-02-29.json").is_file()
+        repo.write_analysis("2024-02-29", {"mode": "under7"})
+        analyses = list((nested / "analyses").glob("2024-02-29-*.json"))
+        assert len(analyses) == 1
+
+        write_profile(nested)
+        server = health_api_server.make_server("127.0.0.1", 0, repo)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        base = f"http://127.0.0.1:{server.server_address[1]}"
+        status, rejected = request_json(
+            base,
+            "POST",
+            "/api/checkin/text",
+            {"text": "蛋白质 130克", "date": "../../evil"},
+        )
+        assert status == 400, rejected
+        assert not (root / "evil.json").exists()
+        assert not (nested / "sessions" / "evil.json").exists()
+        today = datetime.date.today().isoformat()
+        status, accepted = request_json(base, "POST", "/api/checkin/text", {"text": "蛋白质 130克"})
+        assert status == 200, accepted
+        assert (nested / "sessions" / f"{today}.json").is_file()
+    finally:
+        if server is not None:
+            server.shutdown()
+            server.server_close()
+        _remove_tree(root)
+
+
+def test_concurrent_session_saves_keep_every_update() -> None:
+    root = Path(tempfile.mkdtemp(prefix="health-api-race-"))
+    try:
+        repo = health_api_server.MemoryRepository(str(root))
+        count = 12
+        barrier = threading.Barrier(count)
+        errors: list[BaseException] = []
+        seen: list[str] = []
+        target = root / "sessions" / "2026-10-18.json"
+
+        def writer(index: int) -> None:
+            try:
+                barrier.wait(timeout=5)
+                repo.merge_and_save_session(
+                    {
+                        "date": "2026-10-18",
+                        "raw_text": f"note-{index}",
+                        "optional": {f"k{index}": index},
+                    },
+                    source_type="self_report",
+                )
+            except BaseException as exc:
+                errors.append(exc)
+
+        def reader() -> None:
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline:
+                if target.is_file():
+                    try:
+                        parsed = json.loads(target.read_text(encoding="utf-8"))
+                    except json.JSONDecodeError as exc:
+                        errors.append(exc)
+                        return
+                    if isinstance(parsed, dict):
+                        seen.append(str(parsed.get("date")))
+                time.sleep(0.01)
+
+        threads = [threading.Thread(target=writer, args=(index,)) for index in range(count)]
+        threads.append(threading.Thread(target=reader))
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+        assert errors == [], errors
+        saved = json.loads(target.read_text(encoding="utf-8"))
+        for index in range(count):
+            assert saved["optional"][f"k{index}"] == index
+            assert f"note-{index}" in saved["raw_text"]
+        assert list(root.rglob("*.tmp")) == []
+        assert seen, "reader never observed a session file"
+    finally:
+        _remove_tree(root)
+
+
 def test_non_loopback_host_is_rejected() -> None:
     try:
         health_api_server.make_server("0.0.0.0", 0)
@@ -460,6 +815,10 @@ def main() -> None:
         test_spoken_checkin_covers_core_fields,
         test_menubar_title_uses_score_payload,
         test_dashboard_settings_switch_memory_without_touching_login_items,
+        test_loopback_request_parsers,
+        test_cross_site_writes_are_rejected,
+        test_session_dates_stay_inside_sessions_dir,
+        test_concurrent_session_saves_keep_every_update,
         test_non_loopback_host_is_rejected,
     ]
     for test in tests:
