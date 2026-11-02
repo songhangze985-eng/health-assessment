@@ -15,6 +15,8 @@ import io
 import json
 import os
 import re
+import tempfile
+import threading
 import urllib.error
 import urllib.request
 from urllib.parse import parse_qs, urlsplit
@@ -29,6 +31,9 @@ MAX_BODY_BYTES = 12 * 1024 * 1024
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+_ISO_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_SESSION_FILE_LOCKS: dict[str, threading.Lock] = {}
+_SESSION_FILE_LOCKS_GUARD = threading.Lock()
 VALID_SEX = {"female", "male", "other"}
 VALID_FEEDBACK = {"kept_and_changed", "discarded_insult", "invalid"}
 
@@ -161,6 +166,127 @@ def merge_records(existing: dict[str, Any], incoming: dict[str, Any], source_typ
     return merged
 
 
+def require_session_day(value: Any) -> str:
+    """Accept only a real calendar day. The result is safe to use as a filename."""
+    if isinstance(value, datetime.datetime):
+        value = value.date()
+    if isinstance(value, datetime.date):
+        return value.isoformat()
+    text = str(value).strip()
+    if not _ISO_DAY.fullmatch(text):
+        raise ValueError("日期必须是 YYYY-MM-DD。")
+    try:
+        parsed = score_checkin.parse_day(text)
+    except ValueError:
+        raise ValueError("日期必须是 YYYY-MM-DD。") from None
+    if parsed.isoformat() != text:
+        raise ValueError("日期必须是 YYYY-MM-DD。")
+    return text
+
+
+def _contained_file(directory: Path, filename: str) -> Path:
+    root = directory.resolve()
+    target = (root / filename).resolve()
+    if target.parent != root:
+        raise ValueError("日期必须是 YYYY-MM-DD。")
+    return target
+
+
+def _lock_for(path: Path) -> threading.Lock:
+    key = str(path)
+    with _SESSION_FILE_LOCKS_GUARD:
+        lock = _SESSION_FILE_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _SESSION_FILE_LOCKS[key] = lock
+        return lock
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    directory = path.parent
+    directory.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=directory)
+    tmp_path = Path(tmp_name)
+    write_fd: int | None = fd
+    replaced = False
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            write_fd = None
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, path)
+        replaced = True
+    finally:
+        if write_fd is not None:
+            os.close(write_fd)
+        if not replaced:
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+
+
+def host_header_is_loopback(value: str | None, server_port: int) -> bool:
+    """True when Host names this loopback listener. Blocks DNS-rebinding hostnames."""
+    if value is None:
+        return False
+    text = value.strip()
+    if not text or any(char in text for char in " \t,/@\\"):
+        return False
+    if text.startswith("["):
+        end = text.find("]")
+        if end <= 1:
+            return False
+        hostname = text[1:end]
+        rest = text[end + 1 :]
+        if rest:
+            if not rest.startswith(":") or not rest[1:].isdigit():
+                return False
+            seen_port: int | None = int(rest[1:])
+        else:
+            seen_port = None
+    else:
+        if ":" in text:
+            hostname, _, port_text = text.rpartition(":")
+            if not hostname or ":" in hostname or not port_text.isdigit():
+                return False
+            seen_port = int(port_text)
+        else:
+            hostname = text
+            seen_port = None
+    if hostname.lower().rstrip(".") not in LOOPBACK_HOSTS:
+        return False
+    expected = int(server_port)
+    if seen_port is None:
+        return expected == 80
+    return seen_port == expected
+
+
+def origin_matches_loopback_port(origin: str | None, server_port: int) -> bool:
+    """Missing Origin is a non-browser client. A present Origin must be this server."""
+    if origin is None:
+        return True
+    text = origin.strip()
+    if not text or text.lower() == "null":
+        return False
+    parts = urlsplit(text)
+    if parts.scheme != "http" or parts.username or parts.password:
+        return False
+    hostname = (parts.hostname or "").lower().rstrip(".")
+    if hostname not in LOOPBACK_HOSTS:
+        return False
+    port = 80 if parts.port is None else parts.port
+    return port == int(server_port)
+
+
+def content_type_is_json(value: str | None) -> bool:
+    if not value:
+        return False
+    media = value.split(";", 1)[0].strip().lower()
+    return media == "application/json"
+
+
 class MemoryRepository:
     def __init__(self, base_dir: str | None = None) -> None:
         self.root = resolve_memory_root(base_dir)
@@ -239,13 +365,20 @@ class MemoryRepository:
     def merge_and_save_session(self, incoming: dict[str, Any], source_type: str = "self_report") -> dict[str, Any]:
         if self.sessions_dir is None:
             raise RuntimeError("记忆库未绑定。写入 .memory-path，或设置 HEALTH_MEMORY_PATH。")
-        date_str = str(incoming.get("date") or datetime.date.today().isoformat())[:10]
-        target = self.sessions_dir / f"{date_str}.json"
-        existing = self._read_session_file(target) if target.exists() else empty_session(date_str)
-        if existing is None:
-            existing = empty_session(date_str)
-        merged = merge_records(existing, incoming, source_type)
-        target.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
+        raw_date = incoming.get("date")
+        if raw_date is None or (isinstance(raw_date, str) and not raw_date.strip()):
+            day = datetime.date.today().isoformat()
+        else:
+            day = require_session_day(raw_date)
+        payload = dict(incoming)
+        payload["date"] = day
+        target = _contained_file(self.sessions_dir, f"{day}.json")
+        with _lock_for(target):
+            existing = self._read_session_file(target) if target.is_file() else empty_session(day)
+            if existing is None:
+                existing = empty_session(day)
+            merged = merge_records(existing, payload, source_type)
+            _atomic_write_text(target, json.dumps(merged, ensure_ascii=False, indent=2))
         return merged
 
     def save_profile(self, profile: dict[str, Any]) -> dict[str, Any]:
@@ -272,8 +405,9 @@ class MemoryRepository:
     def write_analysis(self, date_str: str, payload: dict[str, Any]) -> None:
         if self.analyses_dir is None:
             return
+        day = require_session_day(date_str)
         stamp = datetime.datetime.now().strftime("%H%M%S")
-        path = self.analyses_dir / f"{date_str}-{stamp}.json"
+        path = _contained_file(self.analyses_dir, f"{day}-{stamp}.json")
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -689,7 +823,6 @@ class HealthAssistantHTTPHandler(BaseHTTPRequestHandler):
         body = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
         self.send_response(status_code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -705,12 +838,70 @@ class HealthAssistantHTTPHandler(BaseHTTPRequestHandler):
     def _path(self) -> str:
         return self.path.split("?", 1)[0]
 
-    def _read_json(self) -> dict[str, Any] | None:
-        length = int(self.headers.get("Content-Length", "0") or "0")
+    def _server_port(self) -> int:
+        return int(self.server.server_address[1])
+
+    def _discard_unread_body(self) -> None:
+        if self.headers.get("Transfer-Encoding"):
+            self.close_connection = True
+            return
+        raw_length = self.headers.get("Content-Length")
+        if raw_length is None:
+            self.close_connection = True
+            return
+        try:
+            length = int(raw_length)
+        except ValueError:
+            self.close_connection = True
+            return
         if length < 0 or length > MAX_BODY_BYTES:
+            self.close_connection = True
+            return
+        if length:
+            self.rfile.read(length)
+
+    def _local_request_error(self) -> str | None:
+        host_values = self.headers.get_all("Host")
+        if (
+            not host_values
+            or len(host_values) != 1
+            or not host_header_is_loopback(host_values[0], self._server_port())
+        ):
+            return "只接受本机回环地址的请求。"
+        fetch_site = str(self.headers.get("Sec-Fetch-Site") or "").strip().lower()
+        if fetch_site == "cross-site":
+            return "拒绝跨站请求。"
+        if not origin_matches_loopback_port(self.headers.get("Origin"), self._server_port()):
+            return "拒绝跨站请求。"
+        return None
+
+    def _guard_request(self) -> bool:
+        error = self._local_request_error()
+        if error is None:
+            return True
+        if self.command not in {"GET", "HEAD"}:
+            self._discard_unread_body()
+        self._send_json({"error": error}, 403)
+        return False
+
+    def _read_json(self) -> dict[str, Any] | None:
+        raw_length = self.headers.get("Content-Length", "0") or "0"
+        try:
+            length = int(raw_length)
+        except ValueError:
+            self.close_connection = True
+            self._send_json({"error": "请求体不是 JSON。"}, 400)
+            return None
+        if length < 0 or length > MAX_BODY_BYTES:
+            self.close_connection = True
             self._send_json({"error": "请求体过大。"}, 413)
             return None
-        raw = self.rfile.read(length) if length else b"{}"
+        raw = self.rfile.read(length) if length else b""
+        if not content_type_is_json(self.headers.get("Content-Type")):
+            self._send_json({"error": "请求体必须是 application/json。"}, 415)
+            return None
+        if not raw:
+            raw = b"{}"
         try:
             data = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
@@ -728,6 +919,8 @@ class HealthAssistantHTTPHandler(BaseHTTPRequestHandler):
         return self.repo
 
     def do_GET(self) -> None:
+        if not self._guard_request():
+            return
         path = self._path()
         repo = self._ready()
         if repo is None:
@@ -748,7 +941,7 @@ class HealthAssistantHTTPHandler(BaseHTTPRequestHandler):
             self._send_json({"profile": profile, "missing_profile": missing, "complete": not missing})
             return
         if path == "/api/settings":
-            self._send_json(mac_dashboard_ui.read_app_config())
+            self._send_json(mac_dashboard_ui.redact_app_config(mac_dashboard_ui.read_app_config()))
             return
         if path == "/ui":
             self._send_html(mac_dashboard_ui.DASHBOARD_HTML)
@@ -756,6 +949,8 @@ class HealthAssistantHTTPHandler(BaseHTTPRequestHandler):
         self._send_json({"error": "Not Found"}, 404)
 
     def do_POST(self) -> None:
+        if not self._guard_request():
+            return
         path = self._path()
         req_json = self._read_json()
         if req_json is None:
@@ -826,9 +1021,22 @@ class HealthAssistantHTTPHandler(BaseHTTPRequestHandler):
         extractor = LLMExtractor()
         type(self).extractor = extractor
         self.extractor = extractor
-        self._send_json({"ok": True, "settings": mac_dashboard_ui.read_app_config(), "memory_path": str(repo.root)})
+        self._send_json(
+            {
+                "ok": True,
+                "settings": mac_dashboard_ui.redact_app_config(mac_dashboard_ui.read_app_config()),
+                "memory_path": str(repo.root),
+            }
+        )
+
+    def _optional_request_day(self, req_json: dict[str, Any]) -> None:
+        raw_date = req_json.get("date")
+        if raw_date is None or (isinstance(raw_date, str) and not raw_date.strip()):
+            return
+        require_session_day(raw_date)
 
     def _handle_text(self, req_json: dict[str, Any]) -> None:
+        self._optional_request_day(req_json)
         extracted = self.extractor.extract_from_text_or_image(
             text=str(req_json.get("text") or ""),
             date_str=req_json.get("date"),
@@ -847,6 +1055,7 @@ class HealthAssistantHTTPHandler(BaseHTTPRequestHandler):
         )
 
     def _handle_file(self, req_json: dict[str, Any]) -> None:
+        self._optional_request_day(req_json)
         filename = Path(str(req_json.get("filename") or "upload.csv")).name
         file_b64 = str(req_json.get("file_base64") or "")
         try:
@@ -860,6 +1069,10 @@ class HealthAssistantHTTPHandler(BaseHTTPRequestHandler):
         suffix = Path(filename).suffix.lower()
         if suffix in {".csv", ".xlsx"}:
             parsed = parse_health_table_bytes(file_bytes, filename, default_date=req_json.get("date"))
+            for item in parsed:
+                raw_date = item.get("date")
+                if raw_date is not None and str(raw_date).strip():
+                    require_session_day(raw_date)
             merged_list = [self.repo.merge_and_save_session(item, source_type="wearable_table") for item in parsed]
             evaluation = score_library(self.repo)
             if merged_list:

@@ -68,6 +68,15 @@ def read_app_config() -> dict[str, Any]:
     return cfg
 
 
+def redact_app_config(cfg: dict[str, Any]) -> dict[str, Any]:
+    """Drop the raw API key. Callers learn only whether it is set and its last four characters."""
+    public = dict(cfg)
+    key = str(public.pop("llm_api_key", "") or "").strip()
+    public["llm_api_key_set"] = bool(key)
+    public["llm_api_key_last4"] = key[-4:] if len(key) >= 4 else ""
+    return public
+
+
 def apply_config_to_env(cfg: dict[str, Any]) -> None:
     memory = str(cfg.get("memory_path") or "").strip()
     if memory:
@@ -309,7 +318,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       <div class="form-row"><label>身高 / 体重</label><div style="display:flex;gap:6px;"><input id="height_cm" type="number" placeholder="身高(cm)"><input id="weight_kg" type="number" step="0.1" placeholder="体重(kg)"></div></div>
       <div class="form-row"><label>年龄 / 性别</label><div style="display:flex;gap:6px;"><input id="age" type="number" placeholder="年龄"><select id="sex"><option value="male">男 (male)</option><option value="female">女 (female)</option><option value="other">其他 (other)</option></select></div></div>
       <div class="form-row"><label>训练年限 / 伤病</label><div style="display:flex;gap:6px;"><input id="training_years" type="number" step="0.5" placeholder="训练年限"><select id="injury"><option value="false">无伤病</option><option value="true">有伤病记录</option></select></div></div>
-      <div class="form-row"><label>LLM API Key</label><input id="llm_api_key" type="password" placeholder="可选：留空则使用本地规则提取" autocomplete="off"></div>
+      <div class="form-row"><label>LLM API Key</label><input id="llm_api_key" type="password" placeholder="可选：留空则不修改；输入新密钥则替换" autocomplete="off"></div>
+      <div class="form-row"><label>清除密钥</label><label style="display:flex;align-items:center;gap:6px;"><input id="clear_api_key" type="checkbox" style="width:auto;"> 保存时删除已保存的 API Key（输入了新密钥时忽略此项）</label></div>
       <div class="form-row"><label>记忆库目录</label><input id="memory_path" type="text" placeholder="~/Library/Application Support/HealthAssessment/memory_store"></div>
       <div class="form-row"><label>开机自动运行</label><label style="display:flex;align-items:center;gap:6px;"><input id="auto_start" type="checkbox" style="width:auto;"> 登录 Mac 时自动启动顶部栏桌宠与服务</label></div>
       <button type="button" id="saveButton" style="width:100%;margin-top:6px;">保存配置并立即激活</button>
@@ -379,7 +389,13 @@ async function refreshAll() {
   if (profile.training_years != null) document.getElementById("training_years").value = profile.training_years;
   if (profile.injury != null) document.getElementById("injury").value = String(Boolean(profile.injury));
   if (cfgRes.memory_path) document.getElementById("memory_path").value = cfgRes.memory_path;
-  if (cfgRes.llm_api_key != null) document.getElementById("llm_api_key").value = cfgRes.llm_api_key;
+  const keyInput = document.getElementById("llm_api_key");
+  if (cfgRes.llm_api_key_set) {
+    const tail = cfgRes.llm_api_key_last4 ? ("（末四位 " + cfgRes.llm_api_key_last4 + "）") : "";
+    keyInput.placeholder = "已保存" + tail + "。留空不修改，输入新密钥则替换";
+  } else {
+    keyInput.placeholder = "可选：留空则不修改；输入新密钥则替换";
+  }
   document.getElementById("auto_start").checked = Boolean(cfgRes.auto_start_on_login);
 }
 async function saveAllSettings() {
@@ -391,12 +407,17 @@ async function saveAllSettings() {
     training_years: numberOrNull("training_years"),
     injury: document.getElementById("injury").value === "true"
   };
+  const typedKey = document.getElementById("llm_api_key").value.trim();
   const settings = {
     memory_path: document.getElementById("memory_path").value.trim(),
-    llm_api_key: document.getElementById("llm_api_key").value.trim(),
     auto_start_on_login: document.getElementById("auto_start").checked,
     profile: profile
   };
+  if (typedKey) {
+    settings.llm_api_key = typedKey;
+  } else if (document.getElementById("clear_api_key").checked) {
+    settings.llm_api_key = "";
+  }
   try {
     await readJson(await fetch("/api/settings", {
       method: "POST",
@@ -413,6 +434,8 @@ async function saveAllSettings() {
     await refreshAll();
     return;
   }
+  document.getElementById("llm_api_key").value = "";
+  document.getElementById("clear_api_key").checked = false;
   await refreshAll();
   alert("配置和个人档案已保存，后台评估已按这份输入运行。");
 }
