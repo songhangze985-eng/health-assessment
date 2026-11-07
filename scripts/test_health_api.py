@@ -794,6 +794,62 @@ def test_concurrent_session_saves_keep_every_update() -> None:
         _remove_tree(root)
 
 
+def test_stored_calendar_span_scores_like_cli_default() -> None:
+    root = Path(tempfile.mkdtemp(prefix="health-api-span-"))
+    pinned_date = health_api_server.datetime.date
+
+    class _PinnedDate(datetime.date):
+        @classmethod
+        def today(cls) -> datetime.date:
+            return cls(2026, 10, 19)
+
+    try:
+        write_profile(root)
+        repo = health_api_server.MemoryRepository(str(root))
+        sessions = []
+        for index in (1, 2, 3, 4, 5, 6, 19):
+            item = {
+                "date": f"2026-10-{index:02d}",
+                "red_flags": [],
+                "body_required": {
+                    "protein_g": 120,
+                    "resistance_sets": 3,
+                    "resistance_load_kg": 40 + index,
+                    "overload": True,
+                },
+                "psych_required": {
+                    "execution_likert": 5,
+                    "classification": "kept_and_changed",
+                },
+                "optional": {"睡眠时长": 5, "边界感": 5},
+            }
+            sessions.append(item)
+            repo.merge_and_save_session(item, source_type="self_report")
+        health_api_server.datetime.date = _PinnedDate
+        cli = health_api_server.score_checkin.score_payload(
+            {"profile": repo.load_profile(), "sessions": sessions}
+        )
+        api = health_api_server.score_library(repo)
+        greeting = health_api_server.build_vpet_greeting(repo)
+        assert cli["mode"] == "scored", cli
+        assert cli["distinct_dates"] == 7
+        assert cli["calendar_span_days"] == 19
+        assert api["mode"] == cli["mode"], api
+        assert api["distinct_dates"] == cli["distinct_dates"]
+        assert api["calendar_span_days"] == cli["calendar_span_days"]
+        assert api["dates"] == cli["dates"]
+        resistance = api["scores"]["body_required"]["parts"]["抗阻"]
+        assert resistance == cli["scores"]["body_required"]["parts"]["抗阻"]
+        assert resistance < 1
+        assert greeting["date"] == "2026-10-19"
+        assert greeting["distinct_dates_collected"] == cli["distinct_dates"]
+        assert greeting["days_needed_for_full_score"] == 0
+        assert "7/7" in greeting["vpet_bubble_text"]
+    finally:
+        health_api_server.datetime.date = pinned_date
+        _remove_tree(root)
+
+
 def test_non_loopback_host_is_rejected() -> None:
     try:
         health_api_server.make_server("0.0.0.0", 0)
@@ -820,6 +876,7 @@ def main() -> None:
         test_session_dates_stay_inside_sessions_dir,
         test_concurrent_session_saves_keep_every_update,
         test_non_loopback_host_is_rejected,
+        test_stored_calendar_span_scores_like_cli_default,
     ]
     for test in tests:
         test()
