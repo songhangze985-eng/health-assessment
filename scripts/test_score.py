@@ -261,11 +261,6 @@ def test_fixture_file_matches_full_score() -> None:
 
 
 def main() -> None:
-    FIXTURES.mkdir(parents=True, exist_ok=True)
-    (FIXTURES / "full-7.json").write_text(
-        json.dumps({"profile": profile(), "sessions": [day(i) for i in range(1, 8)]}, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
     tests = [
         test_full_window_totals_200,
         test_under_seven_has_no_score_and_two_steps_when_gap,
