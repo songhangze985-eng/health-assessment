@@ -341,12 +341,6 @@ def normalize_session(session: dict[str, Any]) -> dict[str, Any]:
         psych["classification"] = psych["feedback_category"]
     item["psych_required"] = psych
     optional = dict(item.get("optional") or {})
-    for side in ("body_optional", "psych_optional"):
-        extra = item.get(side) or {}
-        if isinstance(extra, dict):
-            for key, value in extra.items():
-                if key not in optional and value is not None:
-                    optional[key] = value
     for alias, canonical in OPTIONAL_ALIASES.items():
         if alias not in optional or optional[alias] is None:
             continue
@@ -658,10 +652,6 @@ def score_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "daily_progress": inspect_daily_gaps(sessions, dates[-1] if dates else None),
         "injury_note": "档案写了有伤病，只作备注，本轮不因此停分。" if profile.get("injury") else "",
     }
-
-
-def evaluate_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    return score_payload(payload)
 
 
 def main() -> None:
