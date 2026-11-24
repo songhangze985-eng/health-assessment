@@ -326,7 +326,7 @@ class MemoryRepository:
             return None
         return data
 
-    def load_recent_sessions(self, days: int = 14) -> list[dict[str, Any]]:
+    def load_recent_sessions(self) -> list[dict[str, Any]]:
         if self.sessions_dir is None:
             return []
         grouped: dict[str, list[tuple[str, dict[str, Any]]]] = {}
@@ -347,19 +347,6 @@ class MemoryRepository:
                 source = str((extra.get("sources") or ["self_report"])[-1])
                 merged = merge_records(merged, extra, source)
             sessions.append(merged)
-        if days > 0:
-            cutoff = datetime.date.today() - datetime.timedelta(days=days - 1)
-            kept = []
-            for item in sessions:
-                parsed = None
-                if item.get("date"):
-                    try:
-                        parsed = score_checkin.parse_day(str(item.get("date"))[:10])
-                    except ValueError:
-                        parsed = None
-                if parsed is not None and parsed >= cutoff:
-                    kept.append(item)
-            sessions = kept
         return sessions
 
     def merge_and_save_session(self, incoming: dict[str, Any], source_type: str = "self_report") -> dict[str, Any]:
@@ -715,7 +702,7 @@ def score_library(repo: MemoryRepository) -> dict[str, Any]:
             "error": "记忆库未绑定。在仓库根写入 .memory-path，或设置 HEALTH_MEMORY_PATH。",
         }
     return score_checkin.score_payload(
-        {"profile": repo.load_profile(), "sessions": repo.load_recent_sessions(14)}
+        {"profile": repo.load_profile(), "sessions": repo.load_recent_sessions()}
     )
 
 
@@ -728,7 +715,7 @@ def build_vpet_greeting(repo: MemoryRepository, target_date: str | None = None) 
             "vpet_bubble_text": "还没有绑定记忆库，我先不记今天的打卡。",
             "vpet_suggested_action": "Nomal",
         }
-    sessions = repo.load_recent_sessions(14)
+    sessions = repo.load_recent_sessions()
     flags = score_checkin.collect_red_flags(sessions)
     distinct_dates, _span = score_checkin.compute_calendar_span(sessions)
     if flags:
