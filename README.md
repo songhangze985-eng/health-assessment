@@ -1,5 +1,7 @@
 # Health Assessment（薄肌与黄毛个人健康评估）
 
+> **DSH 插件版**：把这个项目做成 DeepSeek Harness 插件的版本在 [dsh-health-assessment](https://github.com/songhangze985-eng/dsh-health-assessment)（左栏入口 + 独立界面 + 模型工具，计分内核为 TypeScript 移植并保留本仓库 Python 脚本作对照）。本 README 描述的是原始 OpenClaw Skill 与本地服务形态。
+
 **Seven days. Deterministic scores. No medical diagnosis.**
 
 `health-assessment` 把日常自述、饮食或训练图片，以及手表、手机导出的 CSV / Excel，收成同一个人的打卡记录。身体「薄肌」和心理抗压「黄毛」各 100 分。满 7 个不同日期后，由本地脚本合成 200 分。不满 7 天只给出当天还缺什么。
